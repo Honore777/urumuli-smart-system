@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URUBUGA NYAMUKURU - Urubuga rw’Umuyobozi</title>
+    
+    <link rel="stylesheet" href="{{url_for('static', filename='css/tailwind.css')}}">
+
+</head>
+<body class="bg-gradient-to-br from-gray-900 to-slate-800 min-h-screen p-6">
+    <div class="max-w-7xl mx-auto bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-slate-200">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+            <div>
+                {%if show_payment_reviews%}
+                <h1 class="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">🧑‍💼 Urubuga rw’Umuyobozi</h1>
+                <p class="mt-1 text-sm text-gray-500">Incamake y’imikorere, amafaranga n’ibyemezo.</p>
+                    {%else%}
+                <h1 class="text-3xl md:text-4xl font-extrabold text-gray-900 tracking-tight">Urubuga rusange rw’igenzura</h1>
+                <p class="mt-1 text-sm text-gray-900">Incamake y’imikorere, amafaranga n’ibyemezo.</p>
+                {%endif%}
+            </div>
+            <div class="flex flex-wrap items-center gap-2 justify-end">
+
+                <a href="{{ url_for('entry_point') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200">🏠 Menyu Nyamukuru</a>
+                <a href="{{ url_for('logout') }}" class="inline-flex items-center px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm">Sohoka</a>
+            </div>
+        </div>
+
+        <!-- Filters (AJAX-driven) -->
+        <div id="boss-filters" class="mb-6 flex flex-wrap gap-3 items-center">
+            <label class="text-sm text-gray-700">Hitamo Ibuye(mineral)</label>
+            <select id="filter-mineral" class="px-2 py-1 border rounded">
+                <option value="">Amabuye yose</option>
+                <option value="copper">Coltan</option>
+                <option value="cassiterite">Gasegereti</option>
+            </select>
+
+            <label class="text-sm text-gray-700">Kuva iki gihe(itariki)-Guhera</label>
+            <input id="filter-from" type="date" class="px-2 py-1 border rounded">
+
+            <label class="text-sm text-gray-700">Kugeza iki gihe(itariki)-Kugeza</label>
+            <input id="filter-to" type="date" class="px-2 py-1 border rounded">
+
+            <button id="filter-apply" class="px-3 py-1 bg-blue-600 text-white rounded">Emeza</button>
+            <button id="filter-reset" class="px-3 py-1 bg-red-600 text-white rounded">Siba ibyo washyizemo</button>
+        </div>
+
+        <!-- Global KPIs -->
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Incamake y’Imari Rusange</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+                <div class="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-6 rounded-xl shadow-lg ring-1 ring-emerald-400/60">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Inyungu Rusange</h3>
+                    <div id="kpi-total-gross-profit" class="text-3xl font-bold mb-1">{{ '{:,.2f}'.format(total_gross_profit or 0) }}</div>
+                    <div class="text-sm opacity-80">Coltan + Gasegereti</div>
+                </div>
+                <div class="bg-gradient-to-br from-red-600 to-red-800 text-white p-6 rounded-xl shadow-lg ring-1 ring-red-400/60">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Umwenda w’Abatanga Ibicuruzwa</h3>
+                    <div id="kpi-total-supplier-debt" class="text-3xl font-bold mb-1">{{ '{:,.2f}'.format(total_supplier_debt or 0) }}</div>
+                    <div class="text-sm opacity-80">Ibyo tubereyemo abaduha  ibicuruzwa</div>
+                </div>
+                <div class="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-6 rounded-xl shadow-lg ring-1 ring-blue-400/60">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Umwenda w’Abakiriya</h3>
+                    <div id="kpi-total-customer-debt" class="text-3xl font-bold mb-1">{{ '{:,.2f}'.format(total_customer_debt or 0) }}</div>
+                    <div class="text-sm opacity-80">Ibyo abakiriya batubereyemo</div>
+                </div>
+                <div class="bg-gradient-to-br from-yellow-600 to-yellow-800 text-white p-6 rounded-xl shadow-lg ring-1 ring-yellow-400/60">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Amafaranga yishyuwe abakozi imbere</h3>
+                    <div id="kpi-total-internal-worker-payments" class="text-3xl font-bold mb-1">{{ '{:,.2f}'.format(total_internal_worker_payments or 0) }}</div>
+                    <div class="text-sm opacity-80">Coltan + Gasegereti</div>
+                </div>
+                <div class="bg-gradient-to-br from-slate-600 to-slate-800 text-white p-6 rounded-xl shadow-lg ring-1 ring-slate-400/60">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Imari ihari</h3>
+                    <div id="kpi-total-cash-at-hand" class="text-3xl font-bold mb-1">{{ '{:,.2f}'.format(total_cash_at_hand or 0) }}</div>
+                    <div class="text-sm opacity-80">Igiteranyo cy’ibyagurishijwe byose(sales) - imyenda y’abakiriya - amafaranga yishyuwe abakozi (imbere)</div>
+                </div>
+            </div>
+        </section>
+
+        
+
+        <!-- Per mineral KPIs -->
+        <section class="mb-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Copper card -->
+            <div class="bg-gray-50 rounded-2xl p-6 shadow-md border border-gray-200">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-sm font-semibold">Co</span>
+                        <span>Incamake ya Coltan</span>
+                    </h2>
+                </div>
+                    <div class="space-y-3 text-sm">
+                    <div class="flex items-center justify-between bg-white rounded-xl px-3 py-2 shadow-sm border border-gray-100">
+                        <p class="font-semibold text-gray-600">Ibyagurishijwe byose</p>
+                        <p id="copper-total-sales" class="text-base font-semibold tabular-nums text-gray-900">{{ '{:,.2f}'.format(copper_total_sales or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-white rounded-xl px-3 py-2 shadow-sm border border-gray-100">
+                        <p class="font-semibold text-gray-600">Ayo Tugomba kwishyura abanye ibicuruzwa</p>
+                        <p id="copper-total-supplier-obligation" class="text-base font-semibold tabular-nums text-gray-900">{{ '{:,.2f}'.format(copper_total_supplier_obligation or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-emerald-50 rounded-xl px-3 py-2 shadow-sm border border-emerald-100">
+                        <p class="font-semibold text-emerald-800">Inyungu Rusange</p>
+                        <p id="copper-gross-profit" class="text-base font-bold tabular-nums text-emerald-700">{{ '{:,.2f}'.format(copper_gross_profit or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-red-50 rounded-xl px-3 py-2 shadow-sm border border-red-100">
+                        <p class="font-semibold text-red-800">Umwenda w’Abatanga Ibicuruzwa (Usigaye)</p>
+                        <p id="copper-supplier-debt" class="text-base font-bold tabular-nums text-red-700">{{ '{:,.2f}'.format(copper_supplier_debt or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-blue-50 rounded-xl px-3 py-2 shadow-sm border border-blue-100">
+                        <p class="font-semibold text-blue-800">Umwenda w’Abakiriya (Usigaye)</p>
+                        <p id="copper-customer-debt" class="text-base font-bold tabular-nums text-blue-700">{{ '{:,.2f}'.format(copper_customer_debt or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 shadow-sm border border-slate-100">
+                        <p class="font-semibold text-slate-800">Amafaranga ahari</p>
+                        <p id="copper-cash-position" class="text-base font-bold tabular-nums text-slate-900">{{ '{:,.2f}'.format(copper_cash_position or 0) }}</p>
+                    </div>
+                    <div class="pt-4">
+                        {%if current_user.role == 'boss' %}
+                            <a href="{{ url_for('core.boss_copper_ledgers') }}" class="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700 shadow-sm">
+                                Kanda hano urebe igitabo kibaruramari
+                            </a>
+                            <p class="mt-2 text-[11px] text-gray-500">
+                                Reba igitabo cyibaruramari  cy’abatanga ibicuruzwa n’abakiriya kuri coltan.
+                            </p>
+                            {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cassiterite card -->
+            <div class="bg-gray-50 rounded-2xl p-6 shadow-md border border-gray-200">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-sm font-semibold">Sn</span>
+                        <span>Inshamake ya Gasegereti</span>
+                    </h2>
+                </div>
+                    <div class="space-y-3 text-sm">
+                    <div class="flex items-center justify-between bg-white rounded-xl px-3 py-2 shadow-sm border border-gray-100">
+                        <p class="font-semibold text-gray-600">Ibyagurishijwe byose</p>
+                        <p id="cass-total-sales" class="text-base font-semibold tabular-nums text-gray-900">{{ '{:,.2f}'.format(cass_total_sales or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-white rounded-xl px-3 py-2 shadow-sm border border-gray-100">
+                        <p class="font-semibold text-gray-600">Ayo Tugomba kwishyura abanye ibicuruzwa</p>
+                        <p id="cass-total-supplier-obligation" class="text-base font-semibold tabular-nums text-gray-900">{{ '{:,.2f}'.format(cass_total_supplier_obligation or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-emerald-50 rounded-xl px-3 py-2 shadow-sm border border-emerald-100">
+                        <p class="font-semibold text-emerald-800">Inyungu Rusange</p>
+                        <p id="cass-gross-profit" class="text-base font-bold tabular-nums text-emerald-700">{{ '{:,.2f}'.format(cass_gross_profit or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-red-50 rounded-xl px-3 py-2 shadow-sm border border-red-100">
+                        <p class="font-semibold text-red-800">Umwenda w’Abatanga Ibicuruzwa (Usigaye)</p>
+                        <p id="cass-supplier-debt" class="text-base font-bold tabular-nums text-red-700">{{ '{:,.2f}'.format(cass_supplier_debt or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-blue-50 rounded-xl px-3 py-2 shadow-sm border border-blue-100">
+                        <p class="font-semibold text-blue-800">Umwenda w’Abakiriya (Usigaye)</p>
+                        <p id="cass-customer-debt" class="text-base font-bold tabular-nums text-blue-700">{{ '{:,.2f}'.format(cass_customer_debt or 0) }}</p>
+                    </div>
+                    <div class="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 shadow-sm border border-slate-100">
+                        <p class="font-semibold text-slate-800">Amafaranga ahari</p>
+                        <p id="cass-cash-position" class="text-base font-bold tabular-nums text-slate-900">{{ '{:,.2f}'.format(cass_cash_position or 0) }}</p>
+                    </div>
+                    <div class="pt-4">
+                        {% if current_user.role == 'boss' %}
+                        <a href="{{ url_for('core.boss_cassiterite_ledgers') }}" class="inline-flex items-center justify-center px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">
+                           Kanda hano urebe igitabo mbaruramari
+                        </a>
+                        <p class="mt-2 text-[11px] text-gray-500">
+                            Reba igitabo cyibaruramari cy’abatanga ibicuruzwa n’abakiriya kuri Gasegereti.
+                        </p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Pending Payment Reviews (boss/admin only) -->
+        {% if show_payment_reviews %}
+        <section class="mb-10">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Kwemeza Kwishyura Biracyategerejwe</h2>
+            {% if pending_reviews %}
+                <div class="overflow-x-auto rounded-lg shadow-md bg-white">
+                    <table class="min-w-full border-collapse">
+                        <thead class="bg-slate-800 text-white">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Itariki</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Mineral</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Type</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Umukiriya</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Umubare w'amafaranga</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Status </th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Ibikorwa</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for r in pending_reviews %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-3 text-sm text-gray-700">{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else 'N/A' }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700 uppercase">{{ r.mineral_type|translate_mineral }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700">{{ r.type|translate_review_type }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700">{{ r.customer }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700 font-semibold">{{ '{:,.2f}'.format(r.amount or 0) }} {{ r.currency }}</td>
+                                    <td class="px-4 py-3 text-sm text-amber-700 font-semibold">{{ r.status }}</td>
+                                    <td class="px-4 py-3 text-sm">
+                                        <div class="flex gap-2">
+                                            <form method="post" action="{{ url_for('core.boss_approve_payment', review_id=r.id) }}">
+                                                <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded text-xs font-semibold">Emeza</button>
+                                            </form>
+                                            <form method="post" action="{{ url_for('core.boss_reject_payment', review_id=r.id) }}" class="flex gap-2">
+                                                <input type="text" name="boss_comment" placeholder="Impamvu" class="border border-gray-300 rounded px-2 py-1 text-xs" />
+                                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-xs font-semibold">Hakanira</button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-gray-500 text-sm">Nta Gikorwa cyo kwishyura bikeneye kwemezwa.</p>
+            {% endif %}
+        </section>
+        {% endif %}
+
+        <!-- Recent Payment Reviews (approved/rejected) -->
+        <section class="mb-8">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Ibyemezo byishyuwe vuba aha</h2>
+            {% if recent_reviews %}
+                <div class="overflow-x-auto rounded-lg shadow-md bg-white">
+                    <table class="min-w-full border-collapse">
+                        <thead class="bg-slate-700 text-white">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Itariki</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Mineral</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Type</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Umukiriya</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Umubare w'amafaranga</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for r in recent_reviews %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-3 text-sm text-gray-700">{{ r.created_at.strftime('%Y-%m-%d %H:%M') if r.created_at else 'N/A' }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700 uppercase">{{ r.mineral_type|translate_mineral }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700">{{ r.type|translate_review_type }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700">{{ r.customer }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700 font-semibold">{{ '{:,.2f}'.format(r.amount or 0) }} {{ r.currency }}</td>
+                                    <td class="px-4 py-3 text-sm text-amber-700 font-semibold">{{ r.status }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-gray-500 text-sm">Nta byemezo bishya bibonetse.</p>
+            {% endif %}
+        </section>
+        <!-- Recent Bulk Output Plans -->
+        <section class="mb-4">
+            <h2 class="text-2xl font-bold text-gray-800 mb-4">Ibyo baherutse gusohora muri stock</h2>
+            {% if recent_plans %}
+                <div class="overflow-x-auto rounded-lg shadow-md bg-white">
+                    <table class="min-w-full border-collapse">
+                        <thead class="bg-slate-700 text-white">
+                            <tr>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Itariki</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Mineral</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Umukiriya</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Batch</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Imiterere</th>
+                                <th class="px-4 py-3 text-right text-sm font-semibold">Ibiro Byashohotse (kg)</th>
+                            </tr>
+                        </thead>
+                            <tbody id="recent-plans-body" class="divide-y divide-gray-200">
+                                {% for p in recent_plans %}
+                                <tr class="hover:bg-gray-50 text-sm">
+                                    <td class="px-4 py-3 text-gray-700">{{ p.created_at.strftime('%Y-%m-%d %H:%M') if p.created_at else 'N/A' }}</td>
+                                    <td class="px-4 py-3 text-gray-700 uppercase">{{ p.mineral_type }}</td>
+                                    <td class="px-4 py-3 text-gray-700">{{ p.customer or 'N/A' }}</td>
+                                    <td class="px-4 py-3 text-gray-700">{{ p.batch_id or 'N/A' }}</td>
+                                    <td class="px-4 py-3 text-gray-700">{{ p.status }}</td>
+                                    <td class="px-4 py-3 text-right text-gray-700">
+                                        {% if p.plan_json %}
+                                            {% set ns = namespace(total_kg=0) %}
+                                            {% for row in p.plan_json %}
+                                                {% set ns.total_kg = ns.total_kg + (row.planned_output_kg or 0) %}
+                                            {% endfor %}
+                                            {{ "%.2f"|format(ns.total_kg) }}
+                                        {% else %}
+                                            N/A
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-gray-500 text-sm">Nta stock  irasohorwa.</p>
+            {% endif %}
+        </section>
+    </div>
+    <script src="{{ url_for('static', filename='js/boss_dashboard.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+.env
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pytest_cache/
+coverage.xml
+htmlcov/
+
+# Virtual envs
+venv/
+env/
+.venv/
+
+# Distribution / build
+build/
+dist/
+*.egg-info/
+
+# SQLite
+*.sqlite3
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# Logs
+*.log
+
+# Secrets and keys
+secrets/
+*.pem

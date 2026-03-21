@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Record Cassiterite Output</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+    <div class="max-w-2xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Record Cassiterite Output</h1>
+            <a href="{{ url_for('cassiterite.dashboard') }}" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+                Back to Dashboard
+            </a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for category, message in messages %}
+            <div class="px-4 py-3 rounded-md shadow {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <form method="POST" action="{{ url_for('cassiterite.record_output') }}" class="space-y-6">
+                {{ form.hidden_tag() }}
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.date.label }}</label>
+                    {{ form.date(class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                    {% if form.date.errors %}
+                    <div class="text-red-500 text-sm mt-1">
+                        {% for error in form.date.errors %}
+                        <p>• {{ error }}</p>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.stock_id.label }}</label>
+                    {{ form.stock_id(class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+
+                        {% if form.stock_id.errors %}
+                        <div class="text-red-500 text-sm mt-1">
+                            {% for error in form.stock_id.errors %}
+                            <p>• {{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+
+                    
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.output_kg.label }}</label>
+                    {{ form.output_kg(placeholder="Enter quantity in kg", class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+
+                        {% if form.output_kg.errors %}
+                        <div class="text-red-500 text-sm mt-1">
+                            {% for error in form.output_kg.errors %}
+                            <p>• {{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.customer.label }}</label>
+                    
+                    {{ form.customer(placeholder="Enter customer name", class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                        {% if form.customer.errors %}
+                        <div class="text-red-500 text-sm mt-1">
+                            {% for error in form.customer.errors %}
+                            <p>• {{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.output_amount.label }}</label>
+                    {{ form.output_amount(placeholder="Enter output amount ($)", class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                        {% if form.output_amount.errors %}
+                        <div class="text-red-500 text-sm mt-1">
+                            {% for error in form.output_amount.errors %}
+                            <p>• {{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.amount_paid.label }}</label>
+                    {{ form.amount_paid(placeholder="Enter amount paid ($)", class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                        {% if form.amount_paid.errors %}
+                        <div class="text-red-500 text-sm mt-1">
+                            {% for error in form.amount_paid.errors %}
+                            <p>• {{ error }}</p>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                </div>
+
+                <div>
+                    {{ form.submit(class="w-full bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition font-medium") }}
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-6">
+            <h3 class="font-semibold text-blue-900 mb-2">📝 Help</h3>
+            <ul class="text-sm text-blue-800 space-y-1">
+                <li><strong>Stock:</strong> Select the cassiterite stock to deduct from</li>
+                <li><strong>Output (kg):</strong> Quantity in kilograms extracted or processed</li>
+                <li><strong>Customer:</strong> Name of the customer receiving this output</li>
+                <li><strong>Output Amount:</strong> Total value of the output</li>
+                <li><strong>Amount Paid:</strong> Payment received from customer</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

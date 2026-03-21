@@ -1,0 +1,13 @@
+{
+  "name": "smart-account-manager",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "tailwindcss": "^3.3.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0"
+  },
+  "scripts": {
+    "build:css": "npx tailwindcss -i ./static/css/style.css -o ./static/css/tailwind.css --minify"
+  }
+}

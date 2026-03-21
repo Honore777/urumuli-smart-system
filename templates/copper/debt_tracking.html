@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debt Tracking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+
+    <div class="max-w-6xl mx-auto">
+        <!-- Flash Messages -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    <div class="mb-6 space-y-2">
+      {% for category, message in messages %}
+        <div class="px-4 py-3 rounded-md shadow {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+          {{ message }}
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+{% endwith %}
+        <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">Debt Tracking</h1>
+    <a href="{{ url_for('copper.dashboard') }}" 
+       class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+        Back to Dashboard
+    </a>
+</div>
+
+
+        <!-- Form -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <form method="POST"  action="{{ url_for('copper.update_payment') }}"class="space-y-4">
+                {{ form.hidden_tag() }}
+                
+                <!-- Customer Dropdown -->
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.customer.label }}</label>
+                    {{ form.customer(class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500") }}
+                </div>
+
+                <!-- Payment Amount -->
+                <div>
+                    <label class="block mb-1text-gray-700 font-medium mb-1">{{ form.payment_amount.label }}</label>
+                    {{ form.payment_amount(class="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500") }}
+                </div>
+
+                <!-- Submit Button -->
+                <div>
+                    {{ form.submit(class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition") }}
+                </div>
+            </form>
+        </div>
+
+        <!-- Outstanding Debts Table -->
+        <div class="overflow-x-auto">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">
+                Outstanding Debts{% if selected_customer %} for {{ selected_customer }}{% endif %}
+            </h2>
+
+            <table class="min-w-full bg-white shadow-md rounded-lg overflow-hidden">
+                <thead class="bg-indigo-600 text-white">
+                    <tr>
+                        <th class="px-4 py-2 text-left">Date</th>
+                        <th class="px-4 py-2 text-left">Customer</th>
+                        <th class="px-4 py-2 text-left">Output (kg)</th>
+                        <th class="px-4 py-2 text-left">Amount</th>
+                        <th class="px-4 py-2 text-left">Amount Paid</th>
+                        <th class="px-4 py-2 text-left">Remaining Debt</th>
+                        <th class="px-4 py-2 text-left">Note</th>
+                        <th class="px-4 py-2 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for debt in debts %}
+                    <tr class="hover:bg-gray-100">
+                        <td class="px-4 py-2">{{ debt.date.strftime("%Y-%m-%d") }}</td>
+                        <td class="px-4 py-2">{{ debt.customer }}</td>
+                        <td class="px-4 py-2">{{ debt.output_kg }}</td>
+                        <td class="px-4 py-2">{{ debt.output_amount }}</td>
+                        <td class="px-4 py-2">{{ debt.amount_paid }}</td>
+                        <td class="px-4 py-2 font-semibold text-red-600">{{ debt.debt_remaining }}</td>
+                        <td class="px-4 py-2">{{ debt.note or '' }}</td>
+                        <td class="px-4 py-2 text-center">
+                            <a href="{{ url_for('copper.customer_ledger', customer=debt.customer) }}" 
+                               class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition">
+                                View Ledger
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center px-4 py-4 text-gray-500">No outstanding debts found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</body>
+
+
+
+</html>

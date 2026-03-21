@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Supplier Payment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+    <div class="max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Edit Supplier Payment</h1>
+            <a href="{{ url_for('cassiterite.cassiterite_supplier_ledger', supplier=payment.stock_id and '' ) }}" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">Back</a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for category, message in messages %}
+            <div class="px-4 py-3 rounded-md shadow {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <form method="POST" action="{{ url_for('cassiterite.edit_supplier_payment', payment_id=payment.id) }}" class="space-y-4">
+                {{ form.hidden_tag() }}
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">Stock</label>
+                    {{ form.stock_id(class="w-full border border-gray-300 rounded-md p-2") }}
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1">{{ form.amount.label }}</label>
+                        {{ form.amount(class="w-full border border-gray-300 rounded-md p-2") }}
+                    </div>
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1">{{ form.method.label }}</label>
+                        {{ form.method(class="w-full border border-gray-300 rounded-md p-2") }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.reference.label }}</label>
+                    {{ form.reference(class="w-full border border-gray-300 rounded-md p-2") }}
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.note.label }}</label>
+                    {{ form.note(rows="3", class="w-full border border-gray-300 rounded-md p-2") }}
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.change_reason.label }}</label>
+                    {{ form.change_reason(rows="3", class="w-full border border-gray-300 rounded-md p-2") }}
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="submit" class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition">Save</button>
+                    <form method="post" action="{{ url_for('cassiterite.delete_supplier_payment', payment_id=payment.id) }}" onsubmit="const r=prompt('Provide delete reason (required):'); if(!r){alert('Delete reason required.');return false;} document.getElementById('delete-change-reason').value=r; return confirm('Delete this payment?');">
+                        {{ form.csrf_token }}
+                        <input type="hidden" name="change_reason" id="delete-change-reason" />
+                        <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700">Delete</button>
+                    </form>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cassiterite Supplier Ledger</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">{% if user_role == 'boss' %}Inyandiko y'Utanga (Cassiterite) – {{ supplier }}{% else %}Supplier Ledger – {{ supplier }}{% endif %}</h1>
+
+            {% if user_role in ["admin", "accountant"] %}
+                <a href="{{ url_for('cassiterite.pay_supplier') }}"
+                class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition">
+                    ← Back to Suppliers
+                </a>
+            {% endif %}
+            {% if user_role in ['boss'] %}
+                <a href="{{ url_for('core.boss_dashboard') }}"
+                class="bg-gray-600 text-white px-4 py-2 rounded-md hover:bg-gray-700 transition">
+                    ⬅ Back to Boss Dashboard
+                </a>
+            {% endif %}
+
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for category, message in messages %}
+            <div class="px-4 py-3 rounded-md shadow {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Summary Cards -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-white p-6 rounded-lg shadow-md border-l-4 border-red-500">
+                <p class="text-gray-900 text-md">Ayo Tugomba kwishyura</p>
+                <p class="text-3xl font-bold text-red-600">{{ '{:,.2f}'.format(total_owed or 0) }}</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-md border-l-4 border-green-500">
+                <p class="text-gray-900 text-md">Ayo Twishyuye</p>
+                <p class="text-3xl font-bold text-green-600">{{ '{:,.2f}'.format(total_paid or 0) }}</p>
+            </div>
+            <div class="bg-white p-6 rounded-lg shadow-md border-l-4 {{ 'border-orange-500' if balance > 0 else 'border-green-500' }}">
+                <p class="text-gray-900 text-md">Ayo tumusigayemo</p>
+                <p class="text-3xl font-bold {{ 'text-orange-600' if balance > 0 else 'text-green-600' }}">{{ '{:,.2f}'.format(balance or 0) }}</p>
+            </div>
+        </div>
+
+        <!-- Ledger Table -->
+        <div class="bg-white rounded-lg shadow-md overflow-x-auto">
+            <table class="w-full border-collapse">
+                <thead class="bg-indigo-600 text-white">
+                    <tr>
+                        <th class="px-4 py-2 text-left">Date</th>
+                        <th class="px-4 py-2 text-left">Description</th>
+                        <th class="px-4 py-2 text-right">Debit (Owed)</th>
+                        <th class="px-4 py-2 text-right">Credit (Paid)</th>
+                        <th class="px-4 py-2 text-right">Running Balance</th>
+                        <th class="px-4 py-2 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for entry in ledger_entries %}
+                    <tr class="hover:bg-gray-50 {{ 'bg-red-50' if entry.is_payment == False else 'bg-green-50' }}">
+                        <td class="px-4 py-2 font-mono text-sm">{{ entry.date.strftime("%Y-%m-%d") }}</td>
+                        <td class="px-4 py-2">{{ entry.description }}</td>
+                        <td class="px-4 py-2 text-right {{ 'text-red-600 font-semibold' if entry.debit > 0 else '' }}">
+                            {% if entry.debit > 0 %}{{ '{:,.2f}'.format(entry.debit) }}{% endif %}
+                        </td>
+                        <td class="px-4 py-2 text-right {{ 'text-green-600 font-semibold' if entry.credit > 0 else '' }}">
+                            {% if entry.credit > 0 %}{{ '{:,.2f}'.format(entry.credit) }}{% endif %}
+                        </td>
+                        <td class="px-4 py-2 text-right font-bold {{ 'text-orange-600' if entry.balance > 0 else 'text-green-600' }}">
+                            {{ '{:,.2f}'.format(entry.balance) }}
+                        </td>
+                        <td class="px-4 py-2 text-center">
+                            {% if entry.is_payment %}
+                                <a href="{{ url_for('cassiterite.supplier_receipt', payment_id=entry.payment_id) }}" target="_blank" class="inline-block bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition">Receipt</a>
+                                <a href="{{ url_for('cassiterite.edit_supplier_payment', payment_id=entry.payment_id) }}" class="inline-block bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 transition ml-2">Edit</a>
+                                <form method="post" action="{{ url_for('cassiterite.delete_supplier_payment', payment_id=entry.payment_id) }}" style="display:inline" onsubmit="return confirm('Delete this payment?');">
+                                    <button type="submit" class="inline-block bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 ml-2">Delete</button>
+                                </form>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot class="bg-gray-100 border-t-2 border-gray-300">
+                    <tr>
+                        <td colspan="2" class="px-4 py-2 font-bold">TOTAL</td>
+                        <td class="px-4 py-2 text-right font-bold text-red-600">{{ '{:,.2f}'.format(total_owed or 0) }}</td>
+                        <td class="px-4 py-2 text-right font-bold text-green-600">{{ '{:,.2f}'.format(total_paid or 0) }}</td>
+                        <td class="px-4 py-2 text-right font-bold {{ 'text-orange-600' if balance > 0 else 'text-green-600' }}">
+                            {{ '{:,.2f}'.format(balance or 0) }}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ 'Create User' if mode == 'create' else 'Edit User' }} - Admin</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 min-h-screen p-6">
+    <div class="max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8">
+        <h1 class="text-2xl font-extrabold text-slate-900 mb-6">
+            {{ 'Create New User' if mode == 'create' else 'Edit User' }}
+        </h1>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="mb-4 space-y-2">
+                    {% for category, message in messages %}
+                        <div class="text-sm px-3 py-2 rounded border
+                                    {% if category == 'success' %}bg-emerald-50 border-emerald-200 text-emerald-800
+                                    {% elif category == 'warning' %}bg-amber-50 border-amber-200 text-amber-800
+                                    {% elif category == 'danger' %}bg-red-50 border-red-200 text-red-800
+                                    {% else %}bg-slate-50 border-slate-200 text-slate-800{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form method="post" class="space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Username</label>
+                <input
+                    type="text"
+                    name="username"
+                    required
+                    value="{% if form_data %}{{ form_data.username }}{% elif user %}{{ user.username }}{% else %}{{ '' }}{% endif %}"
+                    class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                <input
+                    type="email"
+                    name="email"
+                    value="{% if form_data %}{{ form_data.email }}{% elif user %}{{ user.email or '' }}{% else %}{{ '' }}{% endif %}"
+                    class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Role</label>
+                <select
+                    name="role"
+                    class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                >
+                    {% set current_role = (form_data.role if form_data else (user.role if user else 'accountant')) %}
+                    {% for r in allowed_roles %}
+                        <option value="{{ r }}" {% if r == current_role %}selected{% endif %}>{{ r }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="flex items-center gap-2">
+                {% set active_checked = (form_data.is_active if form_data is not none else (user.is_active if user else True)) %}
+                <input
+                    id="is_active"
+                    type="checkbox"
+                    name="is_active"
+                    value="1"
+                    {% if active_checked %}checked{% endif %}
+                    class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <label for="is_active" class="text-sm text-slate-700">Active</label>
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-700 mb-1">Password</label>
+                <input
+                    type="password"
+                    name="password"
+                    {% if mode == 'create' %}required{% endif %}
+                    placeholder="{% if mode == 'edit' %}Leave blank to keep current password{% else %}Set an initial password{% endif %}"
+                    class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+                />
+            </div>
+
+            <div class="flex items-center justify-between mt-4">
+                <a href="{{ url_for('core.admin_users') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to users</a>
+                <button
+                    type="submit"
+                    class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+                >
+                    {{ 'Create User' if mode == 'create' else 'Save Changes' }}
+                </button>
+            </div>
+        </form>
+    </div>
+</body>
+</html>

@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cassiterite Optimization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Optimize Cassiterite Stocks</h1>
+            <a href="{{ url_for('cassiterite.dashboard') }}" 
+               class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">
+                Back to Dashboard
+            </a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for category, message in messages %}
+            <div class="px-4 py-3 rounded-md shadow {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SECTION 1: INITIAL - Enter target quality and show recommended  -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        {% if mode == "initial" or mode == None %}
+
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Step 1: Enter Target Quality</h2>
+                
+                <form method="POST" action="{{ url_for('cassiterite.optimize') }}" class="space-y-4">
+                    {{ form.hidden_tag() }}
+
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-2">{{ form.target_moyenne.label }}</label>
+                        {{ form.target_moyenne(class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500", placeholder="e.g., 65") }}
+                        <p class="text-sm text-gray-600 mt-1">Target average quality (%)  - Enter the quality level you want to achieve</p>
+                    </div>
+
+                    <button type="submit" 
+                            name="action" 
+                            value="filter"
+                            class="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 font-medium">
+                        🔍 Filter Stocks
+                    </button>
+                </form>
+            </div>
+
+            <!-- Show Recommended Stocks -->
+            {% if mode == "initial" and selected_stocks %}
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">📊 Recommended Stocks</h2>
+                
+                <div class="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 mb-6">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-gray-600 text-sm">Target Moyenne:</p>
+                            <p class="text-2xl font-bold text-green-600">{{ form.target_moyenne.data }}%</p>
+                        </div>
+                        <div>
+                            <p class="text-gray-600 text-sm">Achieved Moyenne:</p>
+                            <p class="text-2xl font-bold text-green-600">{{ "%.2f"|format(achieved_moyenne) }}%</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recommended Stocks Table -->
+                <div class="overflow-x-auto mb-6">
+                    <table class="min-w-full bg-white border border-gray-300">
+                        <thead class="bg-indigo-600 text-white">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Stock ID</th>
+                                <th class="px-4 py-2 text-left">Supplier</th>
+                                <th class="px-4 py-2 text-left">Percentage (%)</th>
+                                <th class="px-4 py-2 text-left">Available (kg)</th>
+                                <th class="px-4 py-2 text-left">Recommended (kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for stock in selected_stocks %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 font-semibold">{{ stock.id }}</td>
+                                <td class="px-4 py-2">{{ stock.supplier }}</td>
+                                <td class="px-4 py-2">{{ "%.2f"|format(stock.percentage) }}%</td>
+                                <td class="px-4 py-2 text-right">{{ "%.2f"|format(stock.local_balance) }}</td>
+                                <td class="px-4 py-2 text-right font-bold text-indigo-600">
+                                    {{ "%.2f"|format(quantities.get(stock.id, 0)) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Actions: edit or go straight to bulk output -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <!-- Edit Selection Button -->
+                    <form method="POST" action="{{ url_for('cassiterite.optimize') }}" class="space-y-0">
+                        {{ form.hidden_tag() }}
+                        <input type="hidden" name="target_moyenne" value="{{ form.target_moyenne.data }}">
+
+                        <button type="submit" 
+                                name="action" 
+                                value="edit"
+                                class="bg-amber-600 text-white px-6 py-3 rounded-md hover:bg-amber-700 font-medium">
+                            ✏️ Edit Selection
+                        </button>
+                    </form>
+
+                    <!-- Direct bulk output using this first optimal selection -->
+                    <button type="button"
+                            onclick="document.getElementById('cass-bulk-output-form-initial').style.display='block'"
+                            class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                        ✅ Confirm & Output
+                    </button>
+                </div>
+
+                <!-- Bulk Output Recording Form for INITIAL selection -->
+                <div class="bg-green-50 p-6 rounded-lg border-2 border-green-500 mt-6 hidden" id="cass-bulk-output-form-initial">
+                    <h3 class="text-xl font-bold text-green-700 mb-4">📤 Record Bulk Output (Current Selection)</h3>
+                    <p class="text-sm text-gray-700 mb-4">
+                        You are about to record a bulk output directly from this recommended selection
+                        (before editing). Quantities will follow the optimal proposal shown above.
+                    </p>
+
+                    <form method="POST" action="{{ url_for('cassiterite.confirm_bulk_output') }}" class="space-y-4">
+                        {{ form.hidden_tag() }}
+                        <!-- Quantities are stored in server-side session -->
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Date</label>
+                                <input type="date" 
+                                       name="date"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Customer</label>
+                                <input type="text" 
+                                       name="customer" 
+                                       placeholder="Customer name"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Total Output Amount</label>
+                                <input type="number" 
+                                       name="output_amount" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Amount Paid</label>
+                                <input type="number" 
+                                       name="amount_paid" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Note (optional)</label>
+                            <textarea name="note" 
+                                      rows="2"
+                                      placeholder="Additional notes"
+                                      class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"></textarea>
+                        </div>
+
+                        <div class="flex gap-3">
+                            <button type="submit" 
+                                    class="flex-1 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                                💾 Record Bulk Output
+                            </button>
+                            <button type="button" 
+                                    onclick="document.getElementById('cass-bulk-output-form-initial').style.display='none'"
+                                    class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SECTION 2: EDIT - Show ALL stocks with editable quantities      -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        {% elif mode == "edit" %}
+
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Step 2: Adjust Stock Quantities</h2>
+                
+                <div class="bg-amber-50 p-4 rounded-lg border-l-4 border-amber-500 mb-6">
+                    <p class="text-gray-600 text-sm">Target Moyenne:</p>
+                    <p class="text-2xl font-bold text-amber-600">{{ form.target_moyenne.data }}%</p>
+                </div>
+
+                <p class="bg-yellow-100 text-yellow-800 p-3 rounded mb-4 text-sm">
+                    📝 Edit quantities below. Leave empty or 0 to exclude a stock. Then click "Recalculate" to re-optimize while keeping your adjustments.
+                </p>
+
+                <!-- EDITABLE FORM -->
+                <form method="POST" action="{{ url_for('cassiterite.optimize') }}" class="space-y-4">
+                    {{ form.hidden_tag() }}
+                    <input type="hidden" name="target_moyenne" value="{{ form.target_moyenne.data }}">
+
+                    <div class="overflow-x-auto mb-6">
+                        <table class="min-w-full bg-white border border-gray-300">
+                            <thead class="bg-amber-600 text-white">
+                                <tr>
+                                    <th class="px-4 py-2 text-left">Stock ID</th>
+                                    <th class="px-4 py-2 text-left">Supplier</th>
+                                    <th class="px-4 py-2 text-left">Percentage (%)</th>
+                                    <th class="px-4 py-2 text-left">Available (kg)</th>
+                                    <th class="px-4 py-2 text-left">Quantity (kg) - EDIT</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                {% for stock in all_stocks %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-2 font-semibold">{{ stock.id }}</td>
+                                    <td class="px-4 py-2">{{ stock.supplier }}</td>
+                                    <td class="px-4 py-2">{{ "%.2f"|format(stock.percentage) }}%</td>
+                                    <td class="px-4 py-2 text-right">{{ "%.2f"|format(stock.local_balance) }}</td>
+                                    <td class="px-4 py-2">
+                                        <input type="number" 
+                                               name="qty_{{ stock.id }}" 
+                                               value="{{ "%.2f"|format(quantities.get(stock.id, stock.local_balance)) }}"
+                                               step="0.01"
+                                               min="0"
+                                               placeholder="0"
+                                               class="w-32 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 text-right">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex gap-3">
+                        <button type="submit" 
+                                name="action" 
+                                value="recalculate"
+                                class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                            ♻️ Recalculate
+                        </button>
+                        <button type="submit" 
+                                name="action" 
+                                value="back_to_initial"
+                                class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                            ← Back
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SECTION 3: RESULT - Show optimized results                      -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        {% elif mode == "result" %}
+
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">✅ Step 3: Optimized Results (Hybrid Variables)</h2>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <div>
+                        <p class="text-gray-600 text-sm">Target Moyenne:</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ form.target_moyenne.data }}%</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600 text-sm">Achieved Moyenne:</p>
+                        <p class="text-2xl font-bold text-green-600">{{ "%.2f"|format(achieved_moyenne) }}%</p>
+                    </div>
+                </div>
+
+                <p class="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded mb-4 text-sm">
+                    ℹ️ <strong>Binary vs Continuous:</strong> Stocks you specified a quantity for have continuous values (may have decimals). Others use binary approach (0 or full amount).
+                </p>
+
+                <!-- Final Results Table -->
+                <div class="overflow-x-auto mb-6">
+                    <table class="min-w-full bg-white border border-gray-300">
+                        <thead class="bg-green-600 text-white">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Stock ID</th>
+                                <th class="px-4 py-2 text-left">Supplier</th>
+                                <th class="px-4 py-2 text-left">Percentage (%)</th>
+                                <th class="px-4 py-2 text-left">Available (kg)</th>
+                                <th class="px-4 py-2 text-left">Selected Qty (kg)</th>
+                                <th class="px-4 py-2 text-left">% of Total</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% set total_selected = quantities.values() | sum %}
+                            {% for stock_id, qty in quantities.items() %}
+                            {% set stock_obj = all_stocks | selectattr('id', 'equalto', stock_id | int) | first %}
+                            {% if stock_obj %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 font-semibold">{{ stock_obj.id }}</td>
+                                <td class="px-4 py-2">{{ stock_obj.supplier }}</td>
+                                <td class="px-4 py-2">{{ "%.2f"|format(stock_obj.percentage) }}%</td>
+                                <td class="px-4 py-2 text-right">{{ "%.2f"|format(stock_obj.local_balance) }}</td>
+                                <td class="px-4 py-2 text-right font-semibold text-green-600">{{ "%.2f"|format(qty) }} kg</td>
+                                <td class="px-4 py-2 text-right">{{ "%.1f"|format((qty / total_selected * 100) if total_selected > 0 else 0) }}%</td>
+                            </tr>
+                            {% endif %}
+                            {% endfor %}
+                        </tbody>
+                        <tfoot class="bg-gray-100 border-t-2 border-gray-300 font-bold">
+                            <tr>
+                                <td colspan="4" class="px-4 py-2">TOTAL</td>
+                                <td class="px-4 py-2 text-right">{{ "%.2f"|format(total_selected) }} kg</td>
+                                <td class="px-4 py-2 text-right">100%</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+
+                <!-- Confirmation Modal Trigger -->
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                    <h3 class="text-lg font-semibold text-blue-900 mb-3">Ready to create bulk export?</h3>
+                    <p class="text-blue-800 text-sm mb-3">Click the button below. You'll be asked for customer, output amount, and payment details for batch export.</p>
+                    <button type="button" onclick="document.getElementById('cass-bulk-output-form-result').style.display='block'" class="bg-blue-600 text-white px-6 py-2 rounded-md hover:bg-blue-700 inline-block">
+                        Confirm and Output
+                    </button>
+                </div>
+
+                <!-- Bulk Output Recording Form for RESULT selection (hidden modal) -->
+                <div class="bg-green-50 p-6 rounded-lg border-2 border-green-500 mt-6" id="cass-bulk-output-form-result" style="display:none;">
+                    <h3 class="text-xl font-bold text-green-700 mb-4">📤 Record Bulk Output (Current Selection)</h3>
+                    <p class="text-sm text-gray-700 mb-4">
+                        You are about to record a bulk output directly from this optimized selection.
+                        Quantities will follow the optimal proposal shown above.
+                    </p>
+
+                    <form method="POST" action="{{ url_for('cassiterite.confirm_bulk_output') }}" class="space-y-4">
+                        {{ form.csrf_token() if form and form.csrf_token }}
+                        <!-- Quantities are stored in server-side session -->
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Date</label>
+                                <input type="date" 
+                                       name="date"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Customer</label>
+                                <input type="text" 
+                                       name="customer" 
+                                       placeholder="Customer name"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Total Output Amount</label>
+                                <input type="number" 
+                                       name="output_amount" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Amount Paid</label>
+                                <input type="number" 
+                                       name="amount_paid" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Note (optional)</label>
+                            <textarea name="note" 
+                                      rows="2"
+                                      placeholder="Additional notes"
+                                      class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"></textarea>
+                        </div>
+
+                        <div class="flex gap-3">
+                            <button type="submit" 
+                                    class="flex-1 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                                💾 Record Bulk Output
+                            </button>
+                            <button type="button" 
+                                    onclick="document.getElementById('cass-bulk-output-form-result').style.display='none'"
+                                    class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="flex gap-3">
+                    <form method="POST" action="{{ url_for('cassiterite.optimize') }}" class="flex-1">
+                        <input type="hidden" name="target_moyenne" value="{{ form.target_moyenne.data }}">
+                        <button type="submit" 
+                                name="action" 
+                                value="back_to_initial"
+                                class="w-full bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                            ← Back to Initial
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        {% endif %}
+
+    </div>
+</body>
+</html>
+    <!-- Help section -->
+    <div class="mt-8 bg-blue-50 border-l-4 border-blue-600 p-6 rounded">
+        <h3 class="font-semibold text-blue-900 mb-2">How to Optimize</h3>
+        <ul class="text-blue-800 space-y-1 text-sm">
+            <li>✓ Enter customer name and total budget</li>
+            <li>✓ Select optimization strategy (quality, cost, or balanced)</li>
+            <li>✓ System automatically calculates best mix</li>
+            <li>✓ Review results and confirm to record outputs</li>
+        </ul>
+    </div>
+</div>
+</body>
+</html>

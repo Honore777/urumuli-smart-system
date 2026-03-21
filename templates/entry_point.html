@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urumuli - Mining System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        .header {
+            margin-bottom: 60px;
+            color: white;
+        }
+
+        .header h1 {
+            font-size: 48px;
+            margin-bottom: 10px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .header p {
+            font-size: 18px;
+            opacity: 0.95;
+            font-weight: 300;
+        }
+
+        .modules-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            width: 100%;
+        }
+
+        .module-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            color: inherit;
+            cursor: pointer;
+            border: 3px solid transparent;
+        }
+
+        .module-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+            border-color: #667eea;
+        }
+
+        .module-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+            display: inline-block;
+        }
+
+        .coltan-icon {
+            color: #ff6b6b;
+        }
+
+        .cassiterite-icon {
+            color: #4ecdc4;
+        }
+
+        .module-card h2 {
+            font-size: 32px;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+
+        .module-card p {
+            font-size: 16px;
+            color: #7f8c8d;
+            margin-bottom: 25px;
+            line-height: 1.6;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 30px;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            border: none;
+            cursor: pointer;
+        }
+
+        .btn-coltan {
+            background-color: #ff6b6b;
+            color: white;
+        }
+
+        .btn-coltan:hover {
+            background-color: #ee5a52;
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .btn-cassiterite {
+            background-color: #4ecdc4;
+            color: white;
+        }
+
+        .btn-cassiterite:hover {
+            background-color: #45b8b0;
+            box-shadow: 0 5px 15px rgba(78, 205, 196, 0.3);
+        }
+
+        .features {
+            margin-top: 15px;
+            font-size: 14px;
+            color: #95a5a6;
+        }
+
+        .feature-list {
+            list-style: none;
+            margin-top: 12px;
+            text-align: left;
+        }
+
+        .feature-list li {
+            padding: 5px 0;
+            color: #7f8c8d;
+        }
+
+        .feature-list li:before {
+            content: "✓ ";
+            color: #27ae60;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .footer {
+            margin-top: 60px;
+            color: white;
+            opacity: 0.8;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 36px;
+            }
+
+            .header p {
+                font-size: 16px;
+            }
+
+            .module-icon {
+                font-size: 48px;
+            }
+
+            .module-card h2 {
+                font-size: 24px;
+            }
+
+            .modules-grid {
+                gap: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ Urumuli - Mining System</h1>
+            <p>Mining Company Management System</p>
+        </div>
+
+        <div class="modules-grid">
+            <!-- Coltan/Copper Module -->
+             {%if current_user.role in [ 'accountant', 'admin']%}
+                <a href="/copper/dashboard" class="module-card">
+                    <div class="module-icon coltan-icon">🔴</div>
+                    <h2>Coltan</h2>
+                    <p>Manage coltan (tantalum) mining operations, stock tracking, and quality optimization</p>
+                    
+                    <div class="features">
+                        <ul class="feature-list">
+                            <li>Stock Management</li>
+                            <li>Quality Optimization</li>
+                            <li>Output Tracking</li>
+                            <li>Debt Ledger</li>
+                        </ul>
+                    </div>
+
+                    <button class="btn btn-coltan">Open Coltan Module →</button>
+                </a>
+                {%endif%}
+            <!-- Cassiterite Module -->
+
+            {% if current_user.role in ['accountant', 'admin'] %}
+
+                        <a href="/cassiterite/dashboard" class="module-card">
+                            <div class="module-icon cassiterite-icon">🟢</div>
+                            <h2>Cassiterite</h2>
+                            <p>Manage cassiterite (tin) mining operations with LME pricing and advanced optimization</p>
+                            
+                            <div class="features">
+                                <ul class="feature-list">
+                                    <li>LME Price Integration</li>
+                                    <li>Stock Management</li>
+                                    <li>Hybrid Optimization</li>
+                                    <li>Payment Tracking</li>
+                                </ul>
+                            </div>
+
+                            <button class="btn btn-cassiterite">Open Cassiterite Module →</button>
+                        </a>    
+                        {% endif %}
+
+                <!-- Boss Consolidated Dashboard (only meaningful for boss role) -->
+
+                {% if current_user.role in ['boss','accountant'] %}
+                <a href="{{ url_for('core.boss_dashboard') }}" class="module-card">
+                    <div class="module-icon" style="color:#f1c40f;">🧑‍💼</div>
+                    <h2>General Overview Dashboard</h2>
+                    <p>See overall company performance across Coltan and Cassiterite: gross profit, debts, and approvals.</p>
+                    <button class="btn" style="background-color:#f1c40f;color:#2c3e50;">Go to General Overview Dashboard</button>
+                </a>
+        </div>
+        {% endif %}
+
+
+
+        <div class="footer">
+            <p>© 2026 Smart Account Manager | Mining Operations Management System</p>
+        </div>
+    </div>
+</body>
+</html>

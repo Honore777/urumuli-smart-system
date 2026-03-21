@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Worker Payment Receipt</title>
+   
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <style>
+        @media print {
+            @page { size: A5 portrait; margin: 10mm; }
+            .no-print { display: none !important; }
+            body { background: white; }
+        }
+        .receipt-table th, .receipt-table td {
+            border: 1px solid #d1d5db;
+            padding: 0.5rem;
+        }
+        .receipt-table {
+            border-collapse: collapse;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-white p-8">
+    <div class="max-w-lg mx-auto shadow-lg border border-gray-300">
+        <!-- Header band -->
+        <div class="flex items-center" style="background: linear-gradient(90deg, #e11d48 0%, #1e293b 100%); padding: 1rem;">
+            <img src="/static/logo.png" alt="Company Logo" class="h-12 mr-4"> <!-- Replace with your logo path -->
+            <div>
+                <h2 class="text-white text-lg font-bold">Receipt Form</h2>
+                <p class="text-white text-xs">Worker Payment Receipt</p>
+            </div>
+        </div>
+        <!-- Details table -->
+        <table class="receipt-table mt-4 mb-4 text-sm">
+            <tr>
+                <th>Date</th>
+                <td>{{ payment.paid_at.strftime('%Y-%m-%d') }}</td>
+                <th>Ref</th>
+                <td>{{ payment.reference }}</td>
+            </tr>
+            <tr>
+                <th>Worker Name</th>
+                <td>{{ payment.worker_name }}</td>
+                <th>Amount</th>
+                <td>{{ '{:,.0f}'.format(payment.amount) }} RWF</td>
+            </tr>
+            <tr>
+                <th>Method</th>
+                <td>{{ payment.method }}</td>
+                <th>Note</th>
+                <td>{{ payment.note or '-' }}</td>
+            </tr>
+        </table>
+        <!-- Signature lines -->
+        <div class="flex justify-between mt-8 mb-4">
+            <div>
+                <div class="border-t border-gray-400 w-32"></div>
+                <p class="text-xs text-gray-600 mt-1">Worker Signature</p>
+            </div>
+            <div>
+                <div class="border-t border-gray-400 w-32"></div>
+                <p class="text-xs text-gray-600 mt-1">Approved By</p>
+            </div>
+        </div>
+        <!-- Print button -->
+        <div class="mt-6 no-print text-center">
+            <button onclick="window.print()" class="px-4 py-2 bg-pink-600 text-white rounded">Print</button>
+        </div>
+    </div>
+</body>
+</html>

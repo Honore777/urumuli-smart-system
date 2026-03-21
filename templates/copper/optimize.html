@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Optimize Stocks</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-gray-800">Optimize Stocks</h1>
+            <a href="{{ url_for('copper.dashboard') }}" 
+               class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700">
+                Back to Dashboard
+            </a>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SECTION 1: INITIAL - Enter targets and show recommended stocks -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        {% if mode == "initial" or mode == None %}
+
+            <!-- Input Form for Target Quality -->
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Step 1: Enter Target Quality</h2>
+                
+                <form method="POST" action="{{ url_for('copper.optimize_stocks') }}" class="space-y-4">
+                    {{ form.hidden_tag() }}
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">{{ form.target_moyenne.label }}</label>
+                            {{ form.target_moyenne(class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500") }}
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">{{ form.target_moyenne_nb.label }}</label>
+                            {{ form.target_moyenne_nb(class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500") }}
+                        </div>
+                    </div>
+
+                    <button type="submit" 
+                            name="action" 
+                            value="filter"
+                            class="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 font-medium">
+                        🔍 Filter Stocks
+                    </button>
+                </form>
+            </div>
+
+            <!-- Show Recommended Stocks After Filter (only when mode="initial") -->
+            {% if mode == "initial" and selected_stocks %}
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">📊 Recommended Stocks</h2>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-blue-50 rounded-lg">
+                    <div>
+                        <p class="text-gray-600 text-sm">Target Moyenne:</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ form.target_moyenne.data }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600 text-sm">Target Moyenne NB:</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ form.target_moyenne_nb.data }}</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <div>
+                        <p class="text-gray-600 text-sm">Achieved Moyenne:</p>
+                        <p class="text-2xl font-bold text-green-600">{{ "%.2f"|format(achieved_moyenne) }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600 text-sm">Achieved Moyenne NB:</p>
+                        <p class="text-2xl font-bold text-green-600">{{ "%.2f"|format(achieved_moyenne_nb) }}</p>
+                    </div>
+                </div>
+
+                <!-- Recommended Stocks Table (Read-Only) -->
+                <div class="overflow-x-auto mb-6">
+                    <table class="min-w-full bg-white border border-gray-300">
+                        <thead class="bg-indigo-600 text-white">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Stock ID</th>
+                                <th class="px-4 py-2 text-left">Supplier</th>
+                                <th class="px-4 py-2 text-left">Unit %</th>
+                                <th class="px-4 py-2 text-left">T_Unity</th>
+                                <th class="px-4 py-2 text-left">Available (kg)</th>
+                                <th class="px-4 py-2 text-left">Recommended (kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for stock in selected_stocks %}
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-4 py-2 font-semibold">{{ stock.id }}</td>
+                                <td class="px-4 py-2">{{ stock.supplier }}</td>
+                                <td class="px-4 py-2">{{ "%.2f"|format(stock.unit_percent) }}</td>
+                                <td class="px-4 py-2">{{ "%.2f"|format(stock.t_unity) }}</td>
+                                <td class="px-4 py-2 text-right">{{ "%.2f"|format(stock.local_balance) }}</td>
+                                <td class="px-4 py-2 text-right font-bold text-indigo-600">
+                                    {{ "%.2f"|format(quantities.get(stock.id, 0)) }}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Actions: edit or go straight to bulk output -->
+                <div class="flex flex-wrap items-center gap-3">
+                    <!-- Edit Selection Button -->
+                    <form method="POST" action="{{ url_for('copper.optimize_stocks') }}" class="space-y-0">
+                        {{ form.hidden_tag() }}
+                        
+                        <!-- Preserve target values -->
+                        <input type="hidden" name="target_moyenne" value="{{ form.target_moyenne.data }}">
+                        <input type="hidden" name="target_moyenne_nb" value="{{ form.target_moyenne_nb.data }}">
+
+                        <button type="submit" 
+                                name="action" 
+                                value="edit"
+                                class="bg-amber-600 text-white px-6 py-3 rounded-md hover:bg-amber-700 font-medium">
+                            ✏️ Edit Selection
+                        </button>
+                    </form>
+
+                    <!-- Direct bulk output using this first optimal selection -->
+                    <button type="button"
+                            onclick="document.getElementById('bulk-output-form-initial').style.display='block'"
+                            class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                        ✅ Confirm & Output
+                    </button>
+                </div>
+
+                <!-- Bulk Output Recording Form for INITIAL selection -->
+                <div class="bg-green-50 p-6 rounded-lg border-2 border-green-500 mt-6 hidden" id="bulk-output-form-initial">
+                    <h3 class="text-xl font-bold text-green-700 mb-4">📤 Record Bulk Output (Current Selection)</h3>
+                    <p class="text-sm text-gray-700 mb-4">
+                        You are about to record a bulk output directly from this recommended selection
+                        (before editing). Quantities will follow the optimal proposal shown above.
+                    </p>
+                    <form method="POST" action="{{ url_for('copper.confirm_bulk_output') }}" class="space-y-4">
+                        {{ form.hidden_tag() }}
+                        <!-- Quantities are stored in server-side session -->
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Date</label>
+                                <input type="date" 
+                                       name="date"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Customer</label>
+                                <input type="text" 
+                                       name="customer" 
+                                       placeholder="Customer name"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Total Output Amount</label>
+                                <input type="number" 
+                                       name="output_amount" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Amount Paid</label>
+                                <input type="number" 
+                                       name="amount_paid" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Note (optional)</label>
+                            <textarea name="note" 
+                                      rows="2"
+                                      placeholder="Additional notes"
+                                      class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"></textarea>
+                        </div>
+
+                        <div class="flex gap-3">
+                            <button type="submit" 
+                                    class="flex-1 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                                💾 Record Bulk Output
+                            </button>
+                            <button type="button" 
+                                    onclick="document.getElementById('bulk-output-form-initial').style.display='none'"
+                                    class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SECTION 2: EDIT - Show ALL stocks with editable quantities      -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        {% elif mode == "edit" %}
+
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">Step 2: Adjust Stock Quantities</h2>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-amber-50 rounded-lg border-l-4 border-amber-500">
+                    <div>
+                        <p class="text-gray-600 text-sm">Target Moyenne:</p>
+                        <p class="text-2xl font-bold text-amber-600">{{ form.target_moyenne.data }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600 text-sm">Target Moyenne NB:</p>
+                        <p class="text-2xl font-bold text-amber-600">{{ form.target_moyenne_nb.data }}</p>
+                    </div>
+                </div>
+
+                <p class="bg-yellow-100 text-yellow-800 p-3 rounded mb-4 text-sm">
+                     Edit quantities below. Leave empty (0) to exclude a stock. Then click "Recalculate" to re-optimize while keeping your adjustments.
+                </p>
+
+                <!-- EDITABLE FORM for user to adjust quantities -->
+                <form method="POST" action="{{ url_for('copper.optimize_stocks') }}" class="space-y-4">
+                    {{ form.hidden_tag() }}
+                    
+                    <!-- Preserve target values -->
+                    <input type="hidden" name="target_moyenne" value="{{ form.target_moyenne.data }}">
+                    <input type="hidden" name="target_moyenne_nb" value="{{ form.target_moyenne_nb.data }}">
+
+                    <div class="overflow-x-auto mb-6">
+                        <table class="min-w-full bg-white border border-gray-300">
+                            <thead class="bg-amber-600 text-white">
+                                <tr>
+                                    <th class="px-4 py-2 text-left">Stock ID</th>
+                                    <th class="px-4 py-2 text-left">Supplier</th>
+                                    <th class="px-4 py-2 text-left">Unit %</th>
+                                    <th class="px-4 py-2 text-left">T_Unity</th>
+                                    <th class="px-4 py-2 text-left">Available (kg)</th>
+                                    <th class="px-4 py-2 text-left">Quantity (kg) - EDIT</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                {% for stock in all_stocks %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-2 font-semibold">{{ stock.id }}</td>
+                                    <td class="px-4 py-2">{{ stock.supplier }}</td>
+                                    <td class="px-4 py-2">{{ "%.2f"|format(stock.unit_percent) }}</td>
+                                    <td class="px-4 py-2">{{ "%.2f"|format(stock.t_unity) }}</td>
+                                    <td class="px-4 py-2 text-right">{{ "%.2f"|format(stock.local_balance) }}</td>
+                                    <td class="px-4 py-2">
+                                        <input type="number" 
+                                               name="qty_{{ stock.id }}" 
+                                               value="{{ "%.2f"|format(quantities.get(stock.id, stock.local_balance)) }}"
+                                               step="0.01"
+                                               min="0"
+                                               placeholder="0"
+                                               class="w-32 px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-amber-500 text-right">
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex gap-3">
+                        <button type="submit" 
+                                name="action" 
+                                value="recalculate"
+                                class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                            ♻️ Recalculate
+                        </button>
+                        <button type="submit" 
+                                name="action" 
+                                value="back_to_initial"
+                                class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                            ← Back
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        <!-- SECTION 3: RESULT - Show final optimized results                -->
+        <!-- ═══════════════════════════════════════════════════════════════ -->
+        {% elif mode == "result" %}
+
+            <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-gray-800">✅ Step 3: Optimized Results</h2>
+                
+                <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <div>
+                        <p class="text-gray-600 text-sm">Target Moyenne:</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ form.target_moyenne.data }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600 text-sm">Achieved Moyenne:</p>
+                        <p class="text-2xl font-bold text-green-600">{{ "%.2f"|format(achieved_moyenne) }}</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mb-6 p-4 bg-green-50 rounded-lg">
+                    <div>
+                        <p class="text-gray-600 text-sm">Target Moyenne NB:</p>
+                        <p class="text-2xl font-bold text-indigo-600">{{ form.target_moyenne_nb.data }}</p>
+                    </div>
+                    <div>
+                        <p class="text-gray-600 text-sm">Achieved Moyenne NB:</p>
+                        <p class="text-2xl font-bold text-green-600">{{ "%.2f"|format(achieved_moyenne_nb) }}</p>
+                    </div>
+                </div>
+
+                <!-- Final Results Table -->
+                <div class="overflow-x-auto mb-6">
+                    <table class="min-w-full bg-white border border-gray-300">
+                        <thead class="bg-green-600 text-white">
+                            <tr>
+                                <th class="px-4 py-2 text-left">Stock ID</th>
+                                <th class="px-4 py-2 text-left">Supplier</th>
+                                <th class="px-4 py-2 text-left">Unit %</th>
+                                <th class="px-4 py-2 text-left">T_Unity</th>
+                                <th class="px-4 py-2 text-left">Available (kg)</th>
+                                <th class="px-4 py-2 text-left">Selected Quantity (kg)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for stock_id, quantity in quantities.items() %}
+                                {% set stock = selected_stocks | selectattr('id', 'equalto', stock_id) | first %}
+                                {% if stock and quantity > 0 %}
+                                <tr class="hover:bg-gray-50">
+                                    <td class="px-4 py-2 font-semibold">{{ stock.id }}</td>
+                                    <td class="px-4 py-2">{{ stock.supplier }}</td>
+                                    <td class="px-4 py-2">{{ "%.2f"|format(stock.unit_percent) }}</td>
+                                    <td class="px-4 py-2">{{ "%.2f"|format(stock.t_unity) }}</td>
+                                    <td class="px-4 py-2 font-bold text-green-600">{{ "%.2f"|format(stock.local_balance) }} kg</td>
+                                    <td class="px-4 py-2 font-bold text-green-600">{{ "%.2f"|format(quantity) }} kg</td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="text-gray-600 text-sm mb-4 p-3 bg-blue-50 rounded">
+                    ✓ Optimization complete with your specified quantities as constraints. Other stocks were selected optimally to meet targets.
+                </p>
+
+                <!-- Bulk Output Recording Form (Initially Hidden) -->
+                <div class="bg-green-50 p-6 rounded-lg border-2 border-green-500 mb-6" id="bulk-output-form" style="display:none;">
+                    <h3 class="text-xl font-bold text-green-700 mb-4">📤 Record Bulk Output</h3>
+                    
+                    <form method="POST" action="{{ url_for('copper.confirm_bulk_output') }}" class="space-y-4">
+                        {{ form.hidden_tag() }}
+                        <!-- Quantities are now stored in server-side session, no need to pass via form -->
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Date</label>
+                                <input type="date" 
+                                       name="date"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Customer</label>
+                                <input type="text" 
+                                       name="customer" 
+                                       placeholder="Customer name"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Total Output Amount</label>
+                                <input type="number" 
+                                       name="output_amount" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+
+                            <div>
+                                <label class="block text-gray-700 font-medium mb-2">Amount Paid</label>
+                                <input type="number" 
+                                       name="amount_paid" 
+                                       step="0.01"
+                                       placeholder="0.00"
+                                       class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"
+                                       required>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-700 font-medium mb-2">Note (optional)</label>
+                            <textarea name="note" 
+                                      rows="2"
+                                      placeholder="Additional notes"
+                                      class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-green-500"></textarea>
+                        </div>
+
+                        <div class="flex gap-3">
+                            <button type="submit" 
+                                    class="flex-1 bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                                💾 Record Bulk Output
+                            </button>
+                            <button type="button" 
+                                    onclick="document.getElementById('bulk-output-form').style.display='none'"
+                                    class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Alternative Actions -->
+                <div class="flex gap-3">
+                    <button type="button" 
+                            onclick="document.getElementById('bulk-output-form').style.display='block'"
+                            class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
+                        ✅ Confirm & Output
+                    </button>
+                    <button type="button" 
+                            onclick="window.print()"
+                            class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                        🖨️ Print Results
+                    </button>
+                    <a href="{{ url_for('copper.optimize_stocks') }}" 
+                       class="bg-indigo-600 text-white px-6 py-3 rounded-md hover:bg-indigo-700 font-medium inline-block">
+                        🔄 Start Over
+                    </a>
+                </div>
+            </div>
+
+        {% else %}
+
+            <!-- No action yet - show welcome message -->
+            <div class="bg-blue-50 p-8 rounded-lg border-l-4 border-blue-500">
+                <h2 class="text-xl font-bold text-blue-900 mb-2">Welcome to Stock Optimization</h2>
+                <p class="text-blue-800">Enter your target quality values and click "Filter Stocks" to get started.</p>
+            </div>
+
+        {% endif %}
+
+    </div>
+
+</body>
+</html>

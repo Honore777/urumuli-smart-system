@@ -1,0 +1,125 @@
+<!-- templates/pay_supplier.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Pay Supplier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<div class="container mx-auto p-6">
+    <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Pay Supplier</h1>
+            <a href="{{ url_for('copper.dashboard') }}" 
+               class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+                Back to Dashboard
+            </a>
+        </div>
+    
+
+    <!-- Flash messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="mb-4 p-4 rounded {{ 'bg-green-100 text-green-800' if category=='success' else 'bg-red-100 text-red-800' }}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- Payment Form -->
+    <form method="POST" class="bg-white p-6 rounded shadow">
+    {{ form.hidden_tag() }}
+
+    <div class="mb-4">
+        {{ form.stock_id.label(class="block font-medium") }}
+        {{ form.stock_id(class="w-full border rounded p-2") }}
+    </div>
+
+    <div class="mb-4">
+        {{ form.amount.label(class="block font-medium") }}
+        {{ form.amount(class="w-full border rounded p-2") }}
+    </div>
+
+    <div class="mb-4">
+        {{ form.method.label(class="block font-medium") }}
+        {{ form.method(class="w-full border rounded p-2") }}
+    </div>
+
+    <div class="mb-4">
+        {{ form.reference.label(class="block font-medium") }}
+        {{ form.reference(class="w-full border rounded p-2") }}
+    </div>
+
+    <div class="mb-4">
+        {{ form.note.label(class="block font-medium") }}
+        {{ form.note(class="w-full border rounded p-2") }}
+    </div>
+
+    {{ form.submit(class="bg-blue-600 text-white px-4 py-2 rounded") }}
+</form>
+
+
+    <!-- Supplier Debts Table -->
+    <h3 class="text-xl font-semibold mt-10 mb-4">
+    Outstanding Supplier Balances
+</h3>
+
+<table class="min-w-full bg-white rounded shadow">
+    <thead class="bg-gray-200">
+        <tr>
+            <th class="px-4 py-2">Supplier</th>
+            <th class="px-4 py-2">Voucher</th>
+            <th class="px-4 py-2">Net Amount</th>
+            <th class="px-4 py-2">Total Paid</th>
+            <th class="px-4 py-2">Remaining</th>
+            <th class='px-4 py-2'> View/Print Receipt</th>
+
+            <th class="px-4 py-2">View Ledger</th>
+
+
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in supplier_summaries %}
+        <tr class="border-t">
+            <td class="px-4 py-2">{{ s.supplier }}</td>
+            <td class="px-4 py-2">{{ s.voucher_no }}</td>
+            <td class="px-4 py-2">{{ s.net_balance | round(2) }}</td>
+            <td class="px-4 py-2 text-green-600">{{ s.total_paid | round(2) }}</td>
+            <td class="px-4 py-2 text-red-600 font-semibold">
+                {{ s.remaining | round(2) }}
+            </td>
+            <td class="px-4 py-2">
+                <div class="mt-4">
+  <ul>
+  {% for payment in s.payments %}
+    <li class="mb-1">
+      <span class="text-xs text-gray-500">{{ payment.date }} - {{ payment.amount | round(2) }} RWF</span>
+      <a href="{{ url_for('copper.supplier_receipt', payment_id=payment.id) }}"
+         class="ml-2 inline-block px-2 py-1 bg-pink-600 text-white rounded no-print hover:bg-pink-700 transition text-xs">
+        View / Print Receipt
+      </a>
+    </li>
+  {% endfor %}
+</ul>
+</div>
+</td>
+            <td class="px-4 py-2">
+    <a href="{{ url_for('supplier_ledger', supplier=s.supplier) }}"
+       class="text-blue-600 hover:underline font-medium">
+        View Ledger
+    </a>
+</td>
+</tr>
+
+       
+           
+        
+
+
+        {% endfor %}
+    </tbody>
+</table>

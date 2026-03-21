@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Supplier Ledger</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen">
+
+<div class="max-w-6xl mx-auto p-6">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-gray-800">
+            {% if user_role == 'boss' %}Inyandiko y'Utanga (Coltan) – {{ supplier }}{% else %}Supplier Ledger – {{ supplier }}{% endif %}
+        </h2>
+        {% if user_role in ['accountant', 'admin'] %}
+            <a href="{{ url_for('copper.track_debts') }}" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+                ← Back to Tracking
+            </a>
+        {% else %}
+            <a href="{{ url_for('core.boss_dashboard') }}" class="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition">
+                ⬅ Back to Boss Dashboard
+            </a>
+        {% endif %}
+        {% if user_role in ['accountant', 'admin'] %}
+            <a href="{{ url_for('copper.pay_supplier') }}"
+            class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 transition">
+                ← Back to Suppliers
+            </a>
+        {% endif %}
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white shadow rounded-lg p-4">
+            <p class="text-md text-gray-900">{% if user_role == 'boss' %}Igiteranyo Cyose (Agomba Kwishyurwa){% else %}Total Owed{% endif %}</p>
+            <p class="text-2xl font-bold text-red-600">{{ '{:,.2f}'.format(total_owed or 0) }}</p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-4">
+            <p class="text-md text-gray-900">{% if user_role == 'boss' %}Igiteranyo Cyose Yishyuye{% else %}Total Paid{% endif %}</p>
+            <p class="text-2xl font-bold text-green-600">{{ '{:,.2f}'.format(total_paid or 0) }}</p>
+        </div>
+        <div class="bg-white shadow rounded-lg p-4">
+            <p class="text-md text-gray-900">{% if user_role == 'boss' %}Umubare Usigaye{% else %}Remaining Balance{% endif %}</p>
+            <p class="text-2xl font-bold text-gray-900">{{ '{:,.2f}'.format(balance or 0) }}</p>
+        </div>
+    </div>
+
+    <!-- Ledger Table -->
+    <div class="bg-white rounded shadow overflow-x-auto">
+        <table class="min-w-full">
+            <thead class="bg-gray-200 text-gray-700">
+                <tr>
+                    <th class="px-4 py-2 text-left">Date</th>
+                    <th class="px-4 py-2 text-left">Description</th>
+                    <th class="px-4 py-2 text-right">Debit (RWF)</th>
+                    <th class="px-4 py-2 text-right">Credit (RWF)</th>
+                    <th class="px-4 py-2 text-right">Running Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in ledger %}
+                <tr class="border-t hover:bg-gray-50">
+                    <td class="px-4 py-2">
+                        {{ row.date.strftime('%Y-%m-%d') }}
+                    </td>
+                    <td class="px-4 py-2">
+                        {{ row.description }}
+                    </td>
+                    <td class="px-4 py-2 text-right text-red-600">
+                        {% if row.debit %}{{ '{:,.2f}'.format(row.debit) }}{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-right text-green-600">
+                        {% if row.credit %}{{ '{:,.2f}'.format(row.credit) }}{% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-right font-semibold">
+                        {{ '{:,.2f}'.format(row.balance) }}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+</div>
+
+</body>
+</html>

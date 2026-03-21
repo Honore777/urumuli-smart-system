@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Smart Account Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-gradient-to-br from-teal-600 to-blue-700 min-h-screen p-6">
+    <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-xl p-8">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900 text-center md:text-left">🏗️ Cassiterite Management Dashboard</h1>
+            <div class="flex flex-wrap items-center gap-3 justify-center md:justify-end">
+                <a href="{{ url_for('entry_point') }}" class="bg-teal-500 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-sm">
+                    🏠 Back to Modules
+                </a>
+                <a href="{{ url_for('core.profile') }}" class="bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold py-2 px-4 rounded-lg shadow-sm border border-slate-200">
+                    👤 Profile
+                </a>
+                <a href="{{ url_for('logout') }}" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-lg shadow-sm">
+                    Logout
+                </a>
+            </div>
+        </div>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-10">
+            <div class="bg-gradient-to-br from-teal-600 to-teal-800 text-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Total Input</h3>
+                <div class="text-4xl font-bold mb-2">{{ "%.2f"|format(total_input) }}</div>
+                <div class="text-sm opacity-80">kg</div>
+            </div>
+            <div class="bg-gradient-to-br from-blue-600 to-blue-800 text-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Total Output</h3>
+                <div class="text-4xl font-bold mb-2">{{ "%.2f"|format(total_output) }}</div>
+                <div class="text-sm opacity-80">kg</div>
+            </div>
+            <div class="bg-gradient-to-br from-orange-600 to-orange-800 text-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Outstanding Debt</h3>
+                <div class="text-4xl font-bold mb-2">{{ "%.2f"|format(total_debt) }}</div>
+                <div class="text-sm opacity-80">RWF</div>
+            </div>
+            <div class="bg-gradient-to-br from-green-600 to-green-800 text-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Total Stocks</h3>
+                <div class="text-4xl font-bold mb-2" id="cass-card-total-stocks">{{ remaining_stocks_count or 0 }}</div>
+                <div class="text-sm opacity-80">records</div>
+            </div>
+            <div class="bg-gradient-to-br from-purple-600 to-purple-800 text-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Moyenne</h3>
+                <div class="text-4xl font-bold mb-2" id="cass-card-moyenne">{{ "%.4f"|format(moyenne or 0) }}</div>
+                <div class="text-sm opacity-80">avg purity %</div>
+            </div>
+            <div class="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Gross Profit (Cassiterite)</h3>
+                <div class="text-3xl font-bold mb-2">{{ "%.2f"|format(gross_profit or 0) }}</div>
+                <div class="text-sm opacity-80">sales - supplier cost</div>
+            </div>
+            <div class="bg-gradient-to-br from-slate-600 to-slate-800 text-white p-6 rounded-lg shadow-lg">
+                <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Imari ihari (Gasegereti)</h3>
+                <div class="text-3xl font-bold mb-2">{{ "%.2f"|format(cash_position or 0) }}</div>
+                <div class="text-sm opacity-80">Ibyagurishijwe byose - imyenda y’abakiriya</div>
+            </div>
+        </div>
+
+        <!-- Date & Lot Number Filter Form -->
+        <div class="bg-teal-50 p-6 rounded-lg shadow-md mb-10 border-2 border-teal-200">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">🗓️ Filter by Date Range & Lot</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Start Date</label>
+                    <input type="date" id="cass-filter-start-date" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">End Date</label>
+                    <input type="date" id="cass-filter-end-date" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">Lot Number</label>
+                    <select id="cass-filter-lot" class="w-full px-4 py-2 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-teal-500">
+                        <option value="">All Lots</option>
+                        {% for v in stocks|map(attribute='voucher_no')|unique %}
+                            <option value="{{ v }}">{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button onclick="cassApplyFilter(event)" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-4 rounded-lg transition">🔍 Filter</button>
+                    <button onclick="cassExportFilteredData(event)" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg transition">📥 Export Excel</button>
+                    <button onclick="cassResetFilter(event)" class="flex-1 bg-gray-400 hover:bg-gray-500 text-white font-semibold py-2 px-4 rounded-lg transition">↺ Reset</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Buttons -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
+            <a href="{{ url_for('cassiterite.add_stock') }}" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                ➕ Add Stock
+            </a>
+            <a href="{{ url_for('cassiterite.record_output') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                📤 Record Output
+            </a>
+            <a href="{{ url_for('cassiterite.list_outputs') }}" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                📦 View All Outputs
+            </a>
+            <a href="{{ url_for('cassiterite.track_debts') }}" class="bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                💳 Track Debts & Customer Ledger
+            </a>
+            <a href="{{ url_for('cassiterite.optimize') }}" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                ⚙️ Optimize Stocks
+            </a>
+            <a href="{{ url_for('cassiterite.pay_supplier') }}" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                💰 Pay Supplier
+            </a>
+            <a href="{{ url_for('cassiterite.pay_worker') }}" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                🧑‍🔧 Pay Worker (internal)
+            </a>
+            <a href="{{ url_for('entry_point') }}" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition transform hover:scale-105 shadow-md">
+                🏠 Back to Modules
+            </a>
+        </div>
+
+        <!-- Charts Section at Top -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10 mt-10">
+            <!-- Input vs Output Bar Chart -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-4 border-teal-600 pb-2">📊 Input vs Output</h2>
+                <div class="relative h-80">
+                    <canvas id="cassInputOutputChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Stock Distribution Pie Chart -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-4 border-purple-600 pb-2">🥧 Stock Distribution</h2>
+                <div class="relative h-80">
+                    <canvas id="cassStockDistributionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cassiterite Stocks Table -->
+        <div class="mb-10">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-4 border-teal-600 pb-2">Cassiterite Stocks</h2>
+            {% if remaining_stocks %}
+                <div class="overflow-x-auto rounded-lg shadow-md">
+                    <table class="w-full border-collapse">
+                        <thead class="bg-teal-600 text-white sticky top-0">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Date</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Voucher</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Supplier</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Type</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Input (kg)</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">%</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Unit %</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">T. Unity</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Moyenne</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">LME</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">M_LME</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Exchange</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Sec</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">TC</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">U.P /kg</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Tot. Amount</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Amount w/Taxes</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Tag/kg</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Amount of Tag</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">RMA</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Inkomane</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">RRA 3%</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Local Balance</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Balance to Pay</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Total Balance</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Remaining</th>
+                                <th class="px-4 py-3 text-left font-semibold text-sm">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-200">
+                            {% for stock in stocks %}
+                                {% if stock.local_balance and stock.local_balance > 0 %}
+                                <tr class="hover:bg-gray-50 transition text-sm">
+                                    <td class="px-4 py-3 text-gray-700">{{ stock.date.strftime('%Y-%m-%d') }}</td>
+                                    <td class="px-4 py-3 text-gray-700 font-semibold">{{ stock.voucher_no }}</td>
+                                    <td class="px-4 py-3 text-gray-700">{{ stock.supplier }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-center">CASSIE</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.input_kg or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.percentage or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.4f"|format(stock.unit_percent or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.t_unity or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.4f"|format(stock.moyenne or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.lme or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.m_lme or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.exchange or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.sec or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.tc or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right bg-blue-50 font-semibold">{{ "%.2f"|format(stock.u_price or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right bg-blue-50 font-semibold">{{ "%.2f"|format(stock.amount or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.amount_with_taxes or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.transport_tag or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.tot_amount_tag or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.rma or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.inkomane or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.rra_3_percent or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.local_balance or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right font-semibold bg-red-50">{{ "%.2f"|format(stock.balance_to_pay or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.total_balance or 0) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">{{ "%.2f"|format(stock.remaining_stock()) }}</td>
+                                    <td class="px-4 py-3 text-gray-700 text-right">
+                                        <button type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 mr-2 edit-cass-stock-btn" data-stock-id="{{ stock.id }}">
+                                            Edit
+                                        </button>
+                                        <button type="button" class="text-xs font-semibold text-red-600 hover:text-red-800 delete-cass-stock-btn" data-stock-id="{{ stock.id }}">
+                                            Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Pagination Controls -->
+                <div class="flex justify-center mt-6">
+                    <nav class="inline-flex rounded-md shadow-sm" aria-label="Pagination">
+                        {% if stocks_pagination.has_prev %}
+                            <a href="{{ url_for('cassiterite.dashboard', page=stocks_pagination.prev_num) }}" class="px-4 py-2 border border-gray-300 bg-white text-gray-700 hover:bg-teal-100 rounded-l-md">Previous</a>
+                        {% else %}
+                            <span class="px-4 py-2 border border-gray-300 bg-gray-100 text-gray-400 rounded-l-md cursor-not-allowed">Previous</span>
+                        {% endif %}
+                        <span class="px-4 py-2 border-t border-b border-gray-300 bg-white text-gray-700">Page {{ stocks_pagination.page }} of {{ stocks_pagination.pages }}</span>
+                        {% if stocks_pagination.has_next %}
+                            <a href="{{ url_for('cassiterite.dashboard', page=stocks_pagination.next_num) }}" class="px-4 py-2 border border-gray-300 bg-white text-gray-700 hover:bg-teal-100 rounded-r-md">Next</a>
+                        {% else %}
+                            <span class="px-4 py-2 border border-gray-300 bg-gray-100 text-gray-400 rounded-r-md cursor-not-allowed">Next</span>
+                        {% endif %}
+                    </nav>
+                </div>
+            {% else %}
+                <div class="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+                    <p class="text-gray-500 text-lg mb-4">📦 No cassiterite stocks yet</p>
+                    <a href="{{ url_for('cassiterite.add_stock') }}" class="inline-block bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-6 rounded-lg transition">Add First Stock</a>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Cassiterite Outputs Table -->
+        {% if outputs %}
+        <div class="mb-10">
+            <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-4 border-blue-600 pb-2">Recent Outputs</h2>
+            <div class="overflow-x-auto rounded-lg shadow-md">
+                <table class="w-full border-collapse">
+                    <thead class="bg-blue-600 text-white">
+                        <tr>
+                            <th class="px-6 py-4 text-left font-semibold">Date</th>
+                            <th class="px-6 py-4 text-left font-semibold">Batch ID</th>
+                            <th class="px-6 py-4 text-left font-semibold">Customer</th>
+                            <th class="px-6 py-4 text-left font-semibold">Output (kg)</th>
+                            <th class="px-6 py-4 text-left font-semibold">Amount Paid</th>
+                            <th class="px-6 py-4 text-left font-semibold">Debt Remaining</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-200">
+                        {% for output in outputs[:10] %}
+                            <tr class="hover:bg-gray-50 transition">
+                                <td class="px-6 py-4 text-gray-700">{{ output.date.strftime('%Y-%m-%d') }}</td>
+                                <td class="px-6 py-4 text-gray-700 font-semibold">{{ output.batch_id or 'N/A' }}</td>
+                                <td class="px-6 py-4 text-gray-700">{{ output.customer }}</td>
+                                <td class="px-6 py-4 text-gray-700">{{ "%.2f"|format(output.output_kg or 0) }}</td>
+                                <td class="px-6 py-4 text-gray-700">{{ "%.2f"|format(output.amount_paid or 0) }}</td>
+                                <td class="px-6 py-4 text-gray-700 font-semibold text-red-600">{{ "%.2f"|format(output.debt_remaining or 0) }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Notifications Panel (for accountants/boss viewing this dashboard) -->
+        {% if notifications is defined and notifications %}
+        <div class="mt-8 bg-gray-50 border border-gray-200 rounded-lg p-6 shadow-sm">
+            <div class="flex items-center mb-4 gap-3">
+                <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                    🔔 Notifications
+                    <span class="text-xs font-semibold text-gray-500">(boss decisions & system alerts)</span>
+                </h2>
+                {% if unread_notifications_count is defined and unread_notifications_count > 0 %}
+                    <span class="ml-2 inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-semibold bg-red-600 text-white">
+                        {{ unread_notifications_count }} new
+                    </span>
+                {% endif %}
+                <form method="post" action="{{ url_for('core.mark_all_notifications_read') }}" class="ml-auto">
+                    <button type="submit" class="text-xs font-semibold text-gray-600 hover:text-gray-900 border border-gray-300 hover:border-gray-500 px-3 py-1 rounded-md bg-white">
+                        Mark all as read
+                    </button>
+                </form>
+            </div>
+            <ul class="divide-y divide-gray-200">
+                {% for n in notifications %}
+                    <li class="py-3 flex items-start justify-between text-sm">
+                        <div class="pr-4">
+                            <p class="font-semibold text-gray-800">{{ n.message }}</p>
+                            <p class="text-xs text-gray-500">{{ n.type }} · {{ n.created_at.strftime('%Y-%m-%d %H:%M') if n.created_at else 'N/A' }}</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            {% if n.read_at %}
+                                <span class="text-xs text-gray-400">Seen</span>
+                            {% else %}
+                                <span class="text-xs text-emerald-600 font-semibold">New</span>
+                                <form method="post" action="{{ url_for('core.mark_notification_read', notification_id=n.id) }}">
+                                    <button type="submit" class="text-xs font-semibold text-blue-600 hover:text-blue-800">
+                                        Mark as read
+                                    </button>
+                                </form>
+                            {% endif %}
+                        </div>
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Edit Cassiterite Stock Modal -->
+    <div id="edit-cass-modal" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-xl p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-xl font-bold text-gray-900">Edit Cassiterite Stock</h3>
+                <button type="button" id="close-edit-cass" class="text-gray-500 hover:text-gray-800">✕</button>
+            </div>
+            <form id="edit-cass-form" method="post">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Date</label>
+                        <input type="date" name="date" id="edit-cass-date" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Lot / Voucher No</label>
+                        <input type="text" name="voucher_no" id="edit-cass-voucher" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Supplier</label>
+                        <input type="text" name="supplier" id="edit-cass-supplier" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Input (kg)</label>
+                        <input type="number" step="0.01" name="input_kg" id="edit-cass-input" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Percentage (%)</label>
+                        <input type="number" step="0.01" name="percentage" id="edit-cass-percentage" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">LME Price</label>
+                        <input type="number" step="0.01" name="lme" id="edit-cass-lme" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">LME Markup (M_LME)</label>
+                        <input type="number" step="0.01" name="m_lme" id="edit-cass-m-lme" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Security Fee (SEC)</label>
+                        <input type="number" step="0.01" name="sec" id="edit-cass-sec" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Transport Cost (TC)</label>
+                        <input type="number" step="0.01" name="tc" id="edit-cass-tc" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Exchange Rate</label>
+                        <input type="number" step="0.01" name="exchange" id="edit-cass-exchange" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-semibold text-gray-700 mb-1">Transport/Tag per Kg</label>
+                        <input type="number" step="0.01" name="transport_tag" id="edit-cass-transport" class="w-full px-3 py-2 border rounded-lg">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-4">
+                    <button type="button" id="cancel-edit-cass" class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded-lg bg-teal-600 text-white font-semibold hover:bg-teal-700">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <form id="delete-cass-form" method="post" class="hidden"></form>
+
+    <script>
+        // Cassiterite dashboard JS: cards, filtering, charts, export
+
+        function cassInitializeCards() {
+            const moyenneValue = JSON.parse('{{ moyenne|tojson }}');
+            const totalInput = JSON.parse('{{ total_input|tojson }}');
+            const totalOutput = JSON.parse('{{ total_output|tojson }}');
+            const totalDebt = JSON.parse('{{ total_debt|tojson }}');
+            const totalStocks = JSON.parse('{{ remaining_stocks_count|default(0)|tojson }}');
+
+            document.querySelector('.bg-gradient-to-br.from-teal-600.to-teal-800 .text-4xl').textContent = totalInput.toFixed(2);
+            document.querySelector('.bg-gradient-to-br.from-blue-600.to-blue-800 .text-4xl').textContent = totalOutput.toFixed(2);
+            document.querySelector('.bg-gradient-to-br.from-orange-600.to-orange-800 .text-4xl').textContent = totalDebt.toFixed(2);
+            document.getElementById('cass-card-total-stocks').textContent = totalStocks;
+            document.getElementById('cass-card-moyenne').textContent = moyenneValue.toFixed(4);
+
+            // Initial fetch for charts and table
+            fetch('{{ url_for("cassiterite.cassiterite_filter_stocks") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_date: '', end_date: '' })
+            })
+            .then(r => r.json())
+            .then(data => {
+                window.cassCurrentFilteredData = data;
+                cassInitializeCharts(data);
+            })
+            .catch(err => {
+                console.error('Cassiterite init charts error:', err);
+                cassFillInputOutputChart([], []);
+                cassFillStockDistributionChart([]);
+            });
+        }
+
+        function cassInitializeCharts(data) {
+            if (!data || !data.stocks) return;
+            const stocks = data.stocks || [];
+            const outputs = data.outputs || [];
+            cassFillInputOutputChart(stocks, outputs);
+            cassFillStockDistributionChart(stocks);
+        }
+
+        let cassInputOutputChartInstance = null;
+        let cassStockDistributionChartInstance = null;
+
+        function cassFillInputOutputChart(stocks, outputs) {
+            const ctx = document.getElementById('cassInputOutputChart');
+            if (!ctx) return;
+
+            const dateInputMap = {};
+            const dateOutputMap = {};
+
+            stocks.forEach(s => {
+                if (!dateInputMap[s.date]) dateInputMap[s.date] = 0;
+                dateInputMap[s.date] += s.input_kg;
+            });
+
+            if (outputs && Array.isArray(outputs)) {
+                outputs.forEach(o => {
+                    if (!dateOutputMap[o.date]) dateOutputMap[o.date] = 0;
+                    dateOutputMap[o.date] += o.output_kg;
+                });
+            }
+
+            const dates = Object.keys(dateInputMap).sort();
+            const inputData = dates.map(d => dateInputMap[d] || 0);
+            const outputData = dates.map(d => dateOutputMap[d] || 0);
+
+            if (cassInputOutputChartInstance) cassInputOutputChartInstance.destroy();
+
+            cassInputOutputChartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: dates.length > 0 ? dates : ['No Data'],
+                    datasets: [
+                        {
+                            label: 'Input (kg)',
+                            data: inputData.length > 0 ? inputData : [0],
+                            backgroundColor: 'rgba(20, 184, 166, 0.7)',
+                            borderColor: 'rgb(20, 184, 166)',
+                            borderWidth: 2
+                        },
+                        {
+                            label: 'Output (kg)',
+                            data: outputData.length > 0 ? outputData : [0],
+                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                            borderColor: 'rgb(59, 130, 246)',
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'top' } },
+                    scales: { y: { beginAtZero: true } }
+                }
+            });
+        }
+
+        function cassFillStockDistributionChart(stocks) {
+            const ctx = document.getElementById('cassStockDistributionChart');
+            if (!ctx) return;
+
+            const supplierMap = {};
+            (stocks || []).forEach(s => {
+                const remaining = s.local_balance ?? 0;
+                if (!remaining || remaining <= 0) return;
+                if (!supplierMap[s.supplier]) supplierMap[s.supplier] = 0;
+                supplierMap[s.supplier] += remaining;
+            });
+
+            const suppliers = Object.keys(supplierMap);
+            const supplierData = Object.values(supplierMap);
+
+            const colors = [
+                'rgba(56, 189, 248, 0.7)',
+                'rgba(16, 185, 129, 0.7)',
+                'rgba(251, 191, 36, 0.7)',
+                'rgba(239, 68, 68, 0.7)',
+                'rgba(129, 140, 248, 0.7)',
+                'rgba(96, 165, 250, 0.7)',
+                'rgba(148, 163, 184, 0.7)'
+            ];
+
+            if (cassStockDistributionChartInstance) cassStockDistributionChartInstance.destroy();
+
+            cassStockDistributionChartInstance = new Chart(ctx.getContext('2d'), {
+                type: 'doughnut',
+                data: {
+                    labels: suppliers.length > 0 ? suppliers : ['No Data'],
+                    datasets: [{
+                        data: supplierData.length > 0 ? supplierData : [0],
+                        backgroundColor: colors.slice(0, Math.max(suppliers.length, 1)),
+                        borderColor: 'white',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom' } }
+                }
+            });
+        }
+
+        function cassApplyFilter(event) {
+            event.preventDefault();
+            const startDate = document.getElementById('cass-filter-start-date').value;
+            const endDate = document.getElementById('cass-filter-end-date').value;
+            const lotNo = document.getElementById('cass-filter-lot').value;
+
+            fetch('{{ url_for("cassiterite.cassiterite_filter_stocks") }}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_date: startDate, end_date: endDate, lot_no: lotNo })
+            })
+            .then(r => r.json())
+            .then(data => {
+                window.cassCurrentFilteredData = data;
+                cassUpdateTable(data.stocks);
+                cassUpdateCards(data);
+                cassInitializeCharts(data);
+            })
+            .catch(err => console.error('Cassiterite filter error:', err));
+        }
+
+        function cassExportFilteredData(event) {
+            event.preventDefault();
+            if (!window.cassCurrentFilteredData || !window.cassCurrentFilteredData.stocks || window.cassCurrentFilteredData.stocks.length === 0) {
+                alert('No filtered data. Please apply a filter first!');
+                return;
+            }
+
+            const stocks = window.cassCurrentFilteredData.stocks;
+            const header = [
+                'Date','Voucher','Supplier','Input(kg)','%','Unit%','T_Unity','Moyenne','LME','M_LME','Exchange','Sec','TC','U_Price','Amount','Amount_with_Taxes','Transport_Tag','Tot_Amount_Tag','RMA','Inkomane','RRA_3%','Local_Balance','Balance_to_Pay','Total_Balance','Remaining'
+            ];
+
+            let csv = header.join(',') + '\n';
+            stocks.forEach(s => {
+                const row = [
+                    s.date, s.voucher_no, s.supplier,
+                    s.input_kg.toFixed(2), s.percentage.toFixed(2), s.unit_percent.toFixed(4), s.t_unity.toFixed(2), s.moyenne.toFixed(4),
+                    s.lme.toFixed(2), s.m_lme.toFixed(2), s.exchange.toFixed(2), s.sec.toFixed(2), s.tc.toFixed(2), s.u_price.toFixed(2),
+                    s.amount.toFixed(2), s.amount_with_taxes.toFixed(2), s.transport_tag.toFixed(2), s.tot_amount_tag.toFixed(2), s.rma.toFixed(2),
+                    s.inkomane.toFixed(2), s.rra_3_percent.toFixed(2), s.local_balance.toFixed(2), s.balance_to_pay.toFixed(2), s.total_balance.toFixed(2), s.remaining.toFixed(2)
+                ];
+                csv += row.join(',') + '\n';
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `filtered_cassiterite_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        }
+
+        function cassUpdateTable(stocks) {
+            const tbody = document.querySelector('tbody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            const remainingStocks = (stocks || []).filter(s => (s.local_balance ?? 0) > 0);
+
+            if (!remainingStocks || remainingStocks.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="26" class="text-center py-8 text-gray-500">No stocks found for selected date range</td></tr>';
+                return;
+            }
+
+            remainingStocks.forEach(s => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50 transition text-sm';
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-gray-700">${s.date}</td>
+                    <td class="px-4 py-3 text-gray-700 font-semibold">${s.voucher_no}</td>
+                    <td class="px-4 py-3 text-gray-700">${s.supplier}</td>
+                    <td class="px-4 py-3 text-gray-700 text-center">CASSIE</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.input_kg.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.percentage.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.unit_percent.toFixed(4)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.t_unity.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.moyenne.toFixed(4)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.lme.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.m_lme.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.exchange.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.sec.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.tc.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right bg-blue-50 font-semibold">${s.u_price.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right bg-blue-50 font-semibold">${s.amount.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.amount_with_taxes.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.transport_tag.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.tot_amount_tag.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.rma.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.inkomane.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.rra_3_percent.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.local_balance.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right font-semibold bg-red-50">${s.balance_to_pay.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.total_balance.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">${s.remaining.toFixed(2)}</td>
+                    <td class="px-4 py-3 text-gray-700 text-right">
+                        <button type="button" class="text-xs font-semibold text-blue-600 hover:text-blue-800 mr-2 edit-cass-stock-btn" data-stock-id="${s.id ?? ''}">Edit</button>
+                        <button type="button" class="text-xs font-semibold text-red-600 hover:text-red-800 delete-cass-stock-btn" data-stock-id="${s.id ?? ''}">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        function cassUpdateCards(data) {
+            document.querySelector('.bg-gradient-to-br.from-teal-600.to-teal-800 .text-4xl').textContent = data.total_input.toFixed(2);
+            document.querySelector('.bg-gradient-to-br.from-blue-600.to-blue-800 .text-4xl').textContent = data.total_output.toFixed(2);
+            document.querySelector('.bg-gradient-to-br.from-orange-600.to-orange-800 .text-4xl').textContent = data.total_debt.toFixed(2);
+            const remainingCount = (data.stocks || []).filter(s => (s.local_balance ?? 0) > 0).length;
+            document.getElementById('cass-card-total-stocks').textContent = remainingCount;
+            document.getElementById('cass-card-moyenne').textContent = data.moyenne.toFixed(4);
+        }
+
+        function cassResetFilter(event) {
+            event.preventDefault();
+            document.getElementById('cass-filter-start-date').value = '';
+            document.getElementById('cass-filter-end-date').value = '';
+            location.reload();
+        }
+        
+        // ---- Edit/Delete Cassiterite Stocks (modal) ----
+        function openCassEditModal(stock) {
+            const modal = document.getElementById('edit-cass-modal');
+            const form = document.getElementById('edit-cass-form');
+            if (!modal || !form || !stock) return;
+
+            const id = stock.id;
+            form.action = `{{ url_for('cassiterite.edit_stock', stock_id=0)[:-1] }}${id}`;
+
+            document.getElementById('edit-cass-date').value = stock.date || '';
+            document.getElementById('edit-cass-voucher').value = stock.voucher_no || '';
+            document.getElementById('edit-cass-supplier').value = stock.supplier || '';
+            document.getElementById('edit-cass-input').value = stock.input_kg ?? '';
+            document.getElementById('edit-cass-percentage').value = stock.percentage ?? '';
+            document.getElementById('edit-cass-lme').value = stock.lme ?? '';
+            document.getElementById('edit-cass-m-lme').value = stock.m_lme ?? '';
+            document.getElementById('edit-cass-sec').value = stock.sec ?? '';
+            document.getElementById('edit-cass-tc').value = stock.tc ?? '';
+            document.getElementById('edit-cass-exchange').value = stock.exchange ?? '';
+            document.getElementById('edit-cass-transport').value = stock.transport_tag ?? '';
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function initCassEditDeleteHandlers() {
+            const modal = document.getElementById('edit-cass-modal');
+            const closeBtn = document.getElementById('close-edit-cass');
+            const cancelBtn = document.getElementById('cancel-edit-cass');
+            const deleteForm = document.getElementById('delete-cass-form');
+
+            function closeModal() {
+                if (!modal) return;
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+
+            if (closeBtn) closeBtn.addEventListener('click', closeModal);
+            if (cancelBtn) cancelBtn.addEventListener('click', event => { event.preventDefault(); closeModal(); });
+
+            document.body.addEventListener('click', function (e) {
+                const editBtn = e.target.closest('.edit-cass-stock-btn');
+                const deleteBtn = e.target.closest('.delete-cass-stock-btn');
+
+                if (editBtn) {
+                    const row = editBtn.closest('tr');
+                    const cells = row ? row.querySelectorAll('td') : [];
+                    const stock = {
+                        id: editBtn.getAttribute('data-stock-id'),
+                        date: cells[0]?.textContent.trim() || '',
+                        voucher_no: cells[1]?.textContent.trim() || '',
+                        supplier: cells[2]?.textContent.trim() || '',
+                        input_kg: parseFloat(cells[4]?.textContent) || '',
+                        percentage: parseFloat(cells[5]?.textContent) || '',
+                        lme: parseFloat(cells[9]?.textContent) || '',
+                        m_lme: parseFloat(cells[10]?.textContent) || '',
+                        exchange: parseFloat(cells[11]?.textContent) || '',
+                        sec: parseFloat(cells[12]?.textContent) || '',
+                        tc: parseFloat(cells[13]?.textContent) || '',
+                        transport_tag: parseFloat(cells[17]?.textContent) || ''
+                    };
+                    openCassEditModal(stock);
+                }
+
+                if (deleteBtn) {
+                    const id = deleteBtn.getAttribute('data-stock-id');
+                    if (!id) return;
+                    if (!confirm('Are you sure you want to delete this cassiterite stock?')) return;
+                    if (!deleteForm) return;
+                    deleteForm.action = `{{ url_for('cassiterite.delete_stock', stock_id=0)[:-1] }}${id}`;
+                    deleteForm.submit();
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            cassInitializeCards();
+            initCassEditDeleteHandlers();
+        });
+    </script>
+</body>
+</html>

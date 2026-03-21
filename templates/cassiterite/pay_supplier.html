@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cassiterite Pay Supplier</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen p-6">
+    <div class="max-w-6xl mx-auto">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-2xl font-bold text-gray-800">Cassiterite Supplier Payments</h1>
+            <a href="{{ url_for('cassiterite.dashboard') }}" class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition">
+                Back to Dashboard
+            </a>
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="mb-6 space-y-2">
+            {% for category, message in messages %}
+            <div class="px-4 py-3 rounded-md shadow {{ 'bg-green-100 text-green-800' if category == 'success' else 'bg-red-100 text-red-800' }}">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Payment Form -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8">
+            <h2 class="text-xl font-semibold mb-4 text-gray-700">💰 Record New Payment</h2>
+            <form method="POST" action="{{ url_for('cassiterite.pay_supplier') }}" class="space-y-4">
+                {{ form.hidden_tag() }}
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1">{{ form.stock_id.label }}</label>
+                        {{ form.stock_id(class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1">{{ form.amount.label }}</label>
+                        {{ form.amount(placeholder="Enter amount", class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1">{{ form.method.label }}</label>
+                        {{ form.method(class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                    </div>
+
+                    <div>
+                        <label class="block text-gray-700 font-medium mb-1">{{ form.reference.label }}</label>
+                        {{ form.reference(placeholder="Receipt/Transaction #", class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-gray-700 font-medium mb-1">{{ form.note.label }}</label>
+                    {{ form.note(rows="3", placeholder="Optional notes", class="w-full border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 p-2") }}
+                </div>
+
+                <div>
+                    {{ form.submit(class="bg-indigo-600 text-white px-6 py-2 rounded-md hover:bg-indigo-700 transition font-medium") }}
+                </div>
+            </form>
+        </div>
+
+        <!-- Supplier Balances Summary -->
+        <div class="overflow-x-auto">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">📊 Outstanding Supplier Balances</h2>
+
+            <table class="w-full bg-white shadow-md rounded-lg overflow-hidden">
+                <thead class="bg-indigo-600 text-white">
+                    <tr>
+                        <th class="px-4 py-2 text-left">Supplier</th>
+                        <th class="px-4 py-2 text-right">Total Owed</th>
+                        <th class="px-4 py-2 text-right">Total Paid</th>
+                        <th class="px-4 py-2 text-right">Remaining Balance</th>
+                        <th class="px-4 py-2 text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                    {% for s in supplier_summaries %}
+                    <tr class="hover:bg-gray-100">
+                        <td class="px-4 py-2 font-semibold">{{ s.supplier }}</td>
+                        <td class="px-4 py-2 text-right">${{ '{:,.2f}'.format(s.owed or 0) }}</td>
+                        <td class="px-4 py-2 text-right text-green-600">${{ '{:,.2f}'.format(s.paid or 0) }}</td>
+                        <td class="px-4 py-2 text-right font-bold {{ 'text-red-600' if s.remaining > 0 else 'text-green-600' }}">
+                            ${{ '{:,.2f}'.format(s.remaining or 0) }}
+                        </td>
+                        <td class="px-4 py-2 text-center">
+                            <a href="{{ url_for('cassiterite.cassiterite_supplier_ledger', supplier=s.supplier) }}" 
+                               class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition">
+                                View Ledger
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center px-4 py-4 text-gray-500">No suppliers found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

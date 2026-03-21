@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Edit Supplier Payment — Copper</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <main class="min-h-screen p-6">
+        <div class="max-w-3xl mx-auto bg-white rounded-2xl shadow-2xl p-8 mt-8 border border-emerald-200">
+            <h2 class="text-2xl font-extrabold text-emerald-700 mb-6">Edit Supplier Payment</h2>
+
+            <form method="POST" action="{{ url_for('copper.edit_supplier_payment', payment_id=payment.id) }}" class="space-y-4">
+                {{ form.hidden_tag() }}
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-2">{{ form.stock_id.label }}</label>
+                    {{ form.stock_id(class="w-full px-4 py-2 border border-gray-300 rounded-lg") }}
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        {{ form.amount.label(class="block text-sm font-semibold text-gray-700 mb-2") }}
+                        {{ form.amount(class="w-full px-4 py-2 border border-gray-300 rounded-lg") }}
+                    </div>
+                    <div>
+                        {{ form.method.label(class="block text-sm font-semibold text-gray-700 mb-2") }}
+                        {{ form.method(class="w-full px-4 py-2 border border-gray-300 rounded-lg") }}
+                    </div>
+                </div>
+
+                <div>
+                    {{ form.reference.label(class="block text-sm font-semibold text-gray-700 mb-2") }}
+                    {{ form.reference(class="w-full px-4 py-2 border border-gray-300 rounded-lg") }}
+                </div>
+
+                <div>
+                    {{ form.note.label(class="block text-sm font-semibold text-gray-700 mb-2") }}
+                    {{ form.note(rows="3", class="w-full px-4 py-2 border border-gray-300 rounded-lg") }}
+                </div>
+
+                <div>
+                    {{ form.change_reason.label(class="block text-sm font-semibold text-gray-700 mb-2") }}
+                    {{ form.change_reason(rows="3", class="w-full px-4 py-2 border border-gray-300 rounded-lg") }}
+                    <p class="text-xs text-gray-500 mt-1">Provide a short reason for this edit (required).</p>
+                </div>
+
+                <div class="flex gap-3">
+                    <button type="submit" class="bg-emerald-600 text-white px-6 py-2 rounded">Save</button>
+                    <form id="delete-payment-form" method="post" action="{{ url_for('copper.delete_supplier_payment', payment_id=payment.id) }}">
+                        {{ form.csrf_token }}
+                        <input type="hidden" name="change_reason" id="delete-change-reason" />
+                        <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded">Delete</button>
+                    </form>
+                </div>
+
+            </form>
+            <script>
+                // Prompt for delete reason and attach to hidden input before submitting
+                document.getElementById('delete-payment-form').addEventListener('submit', function(e){
+                    const reason = prompt('Please enter reason for deleting this payment (required):');
+                    if(!reason){
+                        alert('Delete reason is required.');
+                        e.preventDefault();
+                        return false;
+                    }
+                    document.getElementById('delete-change-reason').value = reason;
+                });
+            </script>
+        </div>
+    </main>
+</body>
+</html>
