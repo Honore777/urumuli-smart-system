@@ -31,16 +31,29 @@ def pay_worker():
 
 			# --- Create PaymentReview for worker payment (no mineral_type) ---
 			from flask_login import current_user
-			from core.models import PaymentReview
-			review = PaymentReview(
-				type='Umukozi',
-				customer=form.worker_name.data,
-				amount=form.amount.data,
-				currency='RWF',
+			from core.models import PaymentReview, PaymentReviewStatus
+			# upsert pending PaymentReview for this worker payment
+			existing = PaymentReview.query.filter_by(
 				payment_id=payment.id,
-				created_by_id=getattr(current_user, 'id', None)
-			)
-			db.session.add(review)
+				status=PaymentReviewStatus.PENDING_REVIEW.value,
+			).first()
+			if existing:
+				existing.mineral_type = None
+				existing.type = 'Umukozi'
+				existing.customer = form.worker_name.data
+				existing.amount = form.amount.data
+				existing.currency = 'RWF'
+				existing.created_by_id = getattr(current_user, 'id', None)
+			else:
+				review = PaymentReview(
+					type='Umukozi',
+					customer=form.worker_name.data,
+					amount=form.amount.data,
+					currency='RWF',
+					payment_id=payment.id,
+					created_by_id=getattr(current_user, 'id', None)
+				)
+				db.session.add(review)
 			db.session.commit()
 
 			# --- IN-APP NOTIFICATION TO BOSS ---
@@ -62,6 +75,7 @@ def pay_worker():
 			from flask_mail import Message
 			from flask import current_app
 			from app import mail
+			from utils import send_email
 			boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
 			payment_details = (
 				f"Umukozi: {form.worker_name.data}, Amafaranga: {form.amount.data} RWF, Uburyo: {form.method.data}, "
@@ -87,10 +101,10 @@ Murakoze,
 Urumuli Smart System
 			"""
 			try:
-				mail.send(msg)
+				send_email(mail, msg)
 			except Exception as e:
 				import logging
-				logging.exception("Failed to send worker payment email notification")
+				logging.exception("Failed to enqueue worker payment email notification")
 				flash("Email notification failed; in-app notification saved.", "warning")
 
 			flash(f"Payment of {form.amount.data} RWF recorded for {form.worker_name.data}.", "success")
@@ -157,19 +171,31 @@ def pay_supplier():
 					db.session.add(payment)
 					db.session.commit()
 
-					# --- Create PaymentReview for supplier payment (cassiterite) ---
+					# --- upsert PaymentReview for supplier payment (cassiterite) ---
 					from flask_login import current_user
-					from core.models import PaymentReview
-					review = PaymentReview(
-						mineral_type='cassiterite',
-						type='Utanga ibicuruzwa',
-						customer=stock.supplier,
-						amount=amount,
-						currency='RWF',
+					from core.models import PaymentReview, PaymentReviewStatus
+					existing = PaymentReview.query.filter_by(
 						payment_id=payment.id,
-						created_by_id=getattr(current_user, 'id', None)
-					)
-					db.session.add(review)
+						status=PaymentReviewStatus.PENDING_REVIEW.value,
+					).first()
+					if existing:
+						existing.mineral_type = 'cassiterite'
+						existing.type = 'Utanga ibicuruzwa'
+						existing.customer = stock.supplier
+						existing.amount = amount
+						existing.currency = 'RWF'
+						existing.created_by_id = getattr(current_user, 'id', None)
+					else:
+						review = PaymentReview(
+							mineral_type='cassiterite',
+							type='Utanga ibicuruzwa',
+							customer=stock.supplier,
+							amount=amount,
+							currency='RWF',
+							payment_id=payment.id,
+							created_by_id=getattr(current_user, 'id', None)
+						)
+						db.session.add(review)
 					db.session.commit()
 
 					# --- IN-APP NOTIFICATION TO BOSS ---
@@ -215,10 +241,10 @@ def pay_supplier():
 		Urumuli Smart  System
 					"""
 					try:
-						mail.send(msg)
+						send_email(mail, msg)
 					except Exception as e:
 						import logging
-						logging.exception("Failed to send cassiterite supplier payment email notification")
+						logging.exception("Failed to enqueue cassiterite supplier payment email notification")
 						flash("Email notification failed; in-app notification saved.", "warning")
 
 					flash(
@@ -311,20 +337,33 @@ def edit_supplier_payment(payment_id):
 			db.session.add(payment)
 			db.session.commit()
 
-			# Create a new PaymentReview for boss to review this change (do not overwrite existing reviews)
+			# upsert pending PaymentReview for this edit so boss sees override
 			from flask_login import current_user as _current_user
-			from core.models import create_notification, User
-			review = PaymentReview(
-				mineral_type='cassiterite',
-				type='Utanga amabuye',
-				customer=stock.supplier,
-				amount=payment.amount,
-				currency='RWF',
+			from core.models import create_notification, User, PaymentReviewStatus, PaymentReview
+			existing = PaymentReview.query.filter_by(
 				payment_id=payment.id,
-				created_by_id=getattr(_current_user, 'id', None),
-				boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
-			)
-			db.session.add(review)
+				status=PaymentReviewStatus.PENDING_REVIEW.value,
+			).first()
+			if existing:
+				existing.mineral_type = 'cassiterite'
+				existing.type = 'Utanga amabuye'
+				existing.customer = stock.supplier
+				existing.amount = payment.amount
+				existing.currency = 'RWF'
+				existing.created_by_id = getattr(_current_user, 'id', None)
+				existing.boss_comment = (f"Edit requested: {form.change_reason.data.strip()}")
+			else:
+				review = PaymentReview(
+					mineral_type='cassiterite',
+					type='Utanga amabuye',
+					customer=stock.supplier,
+					amount=payment.amount,
+					currency='RWF',
+					payment_id=payment.id,
+					created_by_id=getattr(_current_user, 'id', None),
+					boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
+				)
+				db.session.add(review)
 			boss_user = User.query.filter_by(role='boss').first()
 			if boss_user:
 				create_notification(
@@ -341,6 +380,7 @@ def edit_supplier_payment(payment_id):
 				from flask import current_app
 				from flask_mail import Message
 				from app import mail
+				from utils import send_email
 				boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
 				msg = Message(
 					subject="Saba Kwemezwa: Impinduka kuri Kwishyura utanga Ibicuruzwa (Gasegereti)",
@@ -354,11 +394,11 @@ def edit_supplier_payment(payment_id):
 					"Murakoze,\nMujye muri system kwemeza iki gikorwa.\n Urumuli Smart System"
 				)
 				try:
-					mail.send(msg)
+					send_email(mail, msg)
 				except Exception:
-					import logging
-					logging.exception("Failed to send supplier edit email")
-					flash("Email notification failed; in-app notification saved.", "warning")
+						import logging
+						logging.exception("Failed to enqueue supplier edit email")
+						flash("Email notification failed; in-app notification saved.", "warning")
 			except Exception:
 				pass
 
@@ -398,18 +438,32 @@ def delete_supplier_payment(payment_id):
 	try:
 		from flask_login import current_user as _current_user
 		from core.models import create_notification, User
-		# create a PaymentReview representing the delete request
-		review = PaymentReview(
-			mineral_type='cassiterite',
-			type='supplier',
-			customer=supplier,
-			amount=payment.amount,
-			currency='RWF',
-			payment_id=payment.id,
-			created_by_id=getattr(_current_user, 'id', None),
-			boss_comment=(f"Delete requested: {reason.strip()}"),
-		)
-		db.session.add(review)
+			# upsert pending PaymentReview representing the delete request
+		from core.models import PaymentReviewStatus, PaymentReview
+		existing = PaymentReview.query.filter_by(
+				payment_id=payment.id,
+				status=PaymentReviewStatus.PENDING_REVIEW.value,
+			).first()
+		if existing:
+				existing.mineral_type = 'cassiterite'
+				existing.type = 'supplier'
+				existing.customer = supplier
+				existing.amount = payment.amount
+				existing.currency = 'RWF'
+				existing.created_by_id = getattr(_current_user, 'id', None)
+				existing.boss_comment = (f"Delete requested: {reason.strip()}")
+		else:
+				review = PaymentReview(
+					mineral_type='cassiterite',
+					type='supplier',
+					customer=supplier,
+					amount=payment.amount,
+					currency='RWF',
+					payment_id=payment.id,
+					created_by_id=getattr(_current_user, 'id', None),
+					boss_comment=(f"Delete requested: {reason.strip()}"),
+				)
+				db.session.add(review)
 		boss_user = User.query.filter_by(role='boss').first()
 		if boss_user:
 			create_notification(
@@ -455,20 +509,33 @@ def edit_worker_payment(payment_id):
 			db.session.add(payment)
 			db.session.commit()
 
-			# create a PENDING review for the boss to inspect this edit
+			# upsert pending review for edited worker payment so boss sees override
 			from flask_login import current_user as _current_user
-			from core.models import create_notification, User
-			review = PaymentReview(
-				mineral_type=None,
-				type='worker',
-				customer=payment.worker_name,
-				amount=payment.amount,
-				currency='RWF',
+			from core.models import create_notification, User, PaymentReviewStatus, PaymentReview
+			existing = PaymentReview.query.filter_by(
 				payment_id=payment.id,
-				created_by_id=getattr(_current_user, 'id', None),
-				boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
-			)
-			db.session.add(review)
+				status=PaymentReviewStatus.PENDING_REVIEW.value,
+			).first()
+			if existing:
+				existing.mineral_type = None
+				existing.type = 'worker'
+				existing.customer = payment.worker_name
+				existing.amount = payment.amount
+				existing.currency = 'RWF'
+				existing.created_by_id = getattr(_current_user, 'id', None)
+				existing.boss_comment = (f"Edit requested: {form.change_reason.data.strip()}")
+			else:
+				review = PaymentReview(
+					mineral_type=None,
+					type='worker',
+					customer=payment.worker_name,
+					amount=payment.amount,
+					currency='RWF',
+					payment_id=payment.id,
+					created_by_id=getattr(_current_user, 'id', None),
+					boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
+				)
+				db.session.add(review)
 			boss_user = User.query.filter_by(role='boss').first()
 			if boss_user:
 				create_notification(
@@ -511,17 +578,32 @@ def delete_worker_payment(payment_id):
 	try:
 		from flask_login import current_user as _current_user
 		from core.models import create_notification, User
-		review = PaymentReview(
-			mineral_type=None,
-			type='worker',
-			customer=payment.worker_name,
-			amount=payment.amount,
-			currency='RWF',
+		# upsert pending review for worker delete request
+		from core.models import PaymentReviewStatus, PaymentReview
+		existing = PaymentReview.query.filter_by(
 			payment_id=payment.id,
-			created_by_id=getattr(_current_user, 'id', None),
-			boss_comment=(f"Delete requested: {reason.strip()}"),
-		)
-		db.session.add(review)
+			status=PaymentReviewStatus.PENDING_REVIEW.value,
+		).first()
+		if existing:
+			existing.mineral_type = None
+			existing.type = 'worker'
+			existing.customer = payment.worker_name
+			existing.amount = payment.amount
+			existing.currency = 'RWF'
+			existing.created_by_id = getattr(_current_user, 'id', None)
+			existing.boss_comment = (f"Delete requested: {reason.strip()}")
+		else:
+			review = PaymentReview(
+				mineral_type=None,
+				type='worker',
+				customer=payment.worker_name,
+				amount=payment.amount,
+				currency='RWF',
+				payment_id=payment.id,
+				created_by_id=getattr(_current_user, 'id', None),
+				boss_comment=(f"Delete requested: {reason.strip()}"),
+			)
+			db.session.add(review)
 		boss_user = User.query.filter_by(role='boss').first()
 		if boss_user:
 			create_notification(

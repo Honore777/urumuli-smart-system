@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="rw">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Urumuli Smart Mining System</title>
+  
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+
+  <!-- Header -->
+  <header class="w-full bg-white shadow-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+      <a href="{{ url_for('landing') }}" class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-md bg-gradient-to-r from-emerald-500 to-blue-600 flex items-center justify-center text-white font-bold">US</div>
+        <div class="text-sm">
+          <div class="text-xl font-bold text-slate-900">Urumuli</div>
+          <div class="text-xl font-bold text-slate-900">Smart System</div>
+        </div>
+      </a>
+      <nav class="space-x-4 flex items-center">
+
+
+        <a href="{{ url_for('login') }}" class="ml-3 inline-flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-md shadow hover:bg-emerald-700">Tangira</a>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <main class="flex flex-col justify-center items-center min-h-screen px-6 text-center bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+    <h2 class="text-4xl md:text-5xl font-extrabold mb-4">
+      Guhuza ibikorwa by’ubucukuzi n’
+      <span id="swap-word" class="text-emerald-700 opacity-100 transition-opacity duration-500">Ikoranabuhanga Rigezweho</span>
+    </h2>
+    <p class="text-slate-200 max-w-2xl mb-8 text-lg md:text-xl">
+      Urumuli Smart Mining System igufasha kwinjiza stock ya Coltan na  Cassiterite , igufasha gucagura stock byihuse, Kureba ibitabo mbaruramari byabatanga ibicuruzwa n'abakiriya kandi ikaba na sisitemu yoroshya itumanaho muri business harimwo kwemeze transaction n'ibindi.
+    </p>
+    <div class="flex gap-4 justify-center">
+      <a href="{{ url_for('login') }}" class="bg-emerald-600 text-white px-6 py-3 rounded-lg hover:bg-emerald-700 transition">Tangira</a>
+
+    </div>
+  </main>
+
+  <!-- Features Section -->
+  <section class="max-w-7xl mx-auto px-6 py-20 grid grid-cols-1 md:grid-cols-3 gap-15 mt-10">
+    <div class="bg-white rounded-xl p-6 shadow-lg text-slate-900">
+      <h3 class="text-xl font-semibold mb-2">Kwandika neza ibikomoka ku bucukuzi</h3>
+      <p>Gufata amakuru y’ibicuruzwa nka Coltan na Cassiterite ku buryo bwizewe, bigabanya amakosa kandi bigafasha mu micungire y’imirimo.</p>
+    </div>
+    <div class="bg-white rounded-xl p-6 shadow-lg text-slate-900">
+      <h3 class="text-xl font-semibold mb-2">Gucunga stocks neza</h3>
+      <p>Ikoranabuhanga ryacu rigufasha gusesengura stocks kugirango uhitemo ubuziranenge n’ingano  by'amabuye, bigatuma wihutisha akazi kandi ukagaabanya igihombo.</p>
+    </div>
+    <div class="bg-white rounded-xl p-6 shadow-lg text-slate-900">
+      <h3 class="text-xl font-semibold mb-2">Ikumenyesha mu gihe nyacyo</h3>
+      <p>Yihutisha itumanaho muri business binyuze kuri email na notification zo muri sisitemu.</p>
+    </div>
+  </section>
+
+    <!-- Word Swap JS -->
+    <script src="{{ url_for('static', filename='js/landing.js') }}"></script>
+    <script>
+    (function(){
+      const words = [
+        "Ikoranabuhanga Rigezweho",
+        "Itumanaho ryihuse",
+        "Icungwa rya Stock ryizewe",
+        "Izigama ry'igihe n'amafaranga",
+       
+      ];
+      const el = document.getElementById('swap-word');
+      if (!el) return;
+      let idx = 0;
+      function swap(){
+        el.classList.remove('opacity-100');
+        el.classList.add('opacity-0');
+        setTimeout(()=>{
+          idx = (idx + 1) % words.length;
+          el.textContent = words[idx];
+          el.classList.remove('opacity-0');
+          el.classList.add('opacity-100');
+        }, 500);
+      }
+      setTimeout(()=>{
+        setInterval(swap, 2500);
+      }, 800);
+    })();
+  </script>
+
+</body>
+</html>
+
+</body>
+</html>

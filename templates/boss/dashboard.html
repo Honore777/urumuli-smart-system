@@ -71,7 +71,7 @@
                     <div class="text-sm opacity-80">Coltan + Gasegereti</div>
                 </div>
                 <div class="bg-gradient-to-br from-slate-600 to-slate-800 text-white p-6 rounded-xl shadow-lg ring-1 ring-slate-400/60">
-                    <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Imari ihari</h3>
+                    <h3 class="text-sm font-semibold uppercase tracking-wide opacity-90 mb-2">Amafaranga ahari</h3>
                     <div id="kpi-total-cash-at-hand" class="text-3xl font-bold mb-1">{{ '{:,.2f}'.format(total_cash_at_hand or 0) }}</div>
                     <div class="text-sm opacity-80">Igiteranyo cy’ibyagurishijwe byose(sales) - imyenda y’abakiriya - amafaranga yishyuwe abakozi (imbere)</div>
                 </div>
@@ -188,6 +188,7 @@
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Mineral</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Type</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Umukiriya</th>
+                                        <th class="px-4 py-3 text-left text-sm font-semibold">Impamvu</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Umubare w'amafaranga</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Status </th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Ibikorwa</th>
@@ -200,6 +201,7 @@
                                     <td class="px-4 py-3 text-sm text-gray-700 uppercase">{{ r.mineral_type|translate_mineral }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-700">{{ r.type|translate_review_type }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-700">{{ r.customer }}</td>
+                                            <td class="px-4 py-3 text-sm text-gray-700">{{ r.boss_comment or '-' }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-700 font-semibold">{{ '{:,.2f}'.format(r.amount or 0) }} {{ r.currency }}</td>
                                     <td class="px-4 py-3 text-sm text-amber-700 font-semibold">{{ r.status }}</td>
                                     <td class="px-4 py-3 text-sm">
@@ -236,6 +238,7 @@
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Mineral</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Type</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Umukiriya</th>
+                                <th class="px-4 py-3 text-left text-sm font-semibold">Impamvu</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Umubare w'amafaranga</th>
                                 <th class="px-4 py-3 text-left text-sm font-semibold">Status</th>
                             </tr>
@@ -247,6 +250,7 @@
                                     <td class="px-4 py-3 text-sm text-gray-700 uppercase">{{ r.mineral_type|translate_mineral }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-700">{{ r.type|translate_review_type }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-700">{{ r.customer }}</td>
+                                    <td class="px-4 py-3 text-sm text-gray-700">{{ r.boss_comment or '-' }}</td>
                                     <td class="px-4 py-3 text-sm text-gray-700 font-semibold">{{ '{:,.2f}'.format(r.amount or 0) }} {{ r.currency }}</td>
                                     <td class="px-4 py-3 text-sm text-amber-700 font-semibold">{{ r.status }}</td>
                                 </tr>

@@ -138,6 +138,33 @@ def logout():
 
 
 @app.route("/")
+def landing():
+    """Public landing page.
+
+    - Unauthenticated visitors see a friendly landing page with a small
+      login form/CTA.
+    - Authenticated users are redirected to their role dashboard (keeps
+      existing role-redirect behaviour).
+    """
+
+    if current_user.is_authenticated:
+        user = current_user
+        if getattr(user, 'role', None) == "admin":
+            return redirect(url_for("core.admin_users"))
+        if getattr(user, 'role', None) == "boss":
+            return redirect(url_for("core.boss_dashboard"))
+        if getattr(user, 'role', None) == "store_keeper":
+            return redirect(url_for("core.store_dashboard"))
+        if getattr(user, 'role', None) == "accountant":
+            return redirect(url_for("copper.dashboard"))
+
+        
+
+        # Unauthenticated: render public landing page
+    return render_template("landing.html", user_role=getattr(current_user, 'role', None))
+
+
+@app.route("/entry")
 @login_required
 def entry_point():
     """Main application entry once logged in.

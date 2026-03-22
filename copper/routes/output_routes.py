@@ -23,7 +23,7 @@ def record_output():
         # Populate stock choices for the dropdown
         form.stock_id.choices = [
             (s.id, f"{s.voucher_no} ({s.local_balance})  ({s.supplier})")
-            for s in CopperStock.query.order_by(CopperStock.date.desc()).all()
+            for s in CopperStock.query.order_by(CopperStock.date.desc()).all() if s.local_balance > 0
         ]
 
         if request.method == "POST":
@@ -79,6 +79,7 @@ def record_output():
             from flask import current_app
             from flask_login import current_user
             from app import mail
+            from utils import send_email
             storekeeper_email = [storekeeper_user.email] if storekeeper_user and storekeeper_user.email else ["storekeeper@example.com"]
             output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {output_kg} kg, Customer: {customer}, Note: {note}"
             msg = Message(
@@ -87,51 +88,16 @@ def record_output():
                 recipients=storekeeper_email
             )
             msg.body = f"""
-Dear Storekeeper,\n\nAccountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) has requested the following stock to be released:\n\n{output_details}\n\nPlease process this request.\n\nRegards,\nSmart Account Manager System
+Dear Storekeeper,\n\nAccountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) yasabye gusohora izi stock zikurikira:\n\n{output_details}\n\nPlease process this request.\n\nRegards,\nSmart Account Manager System
             """
             try:
-                mail.send(msg)
+                send_email(mail, msg)
             except Exception:
                 import logging
-                logging.exception("Failed to send copper output email")
+                logging.exception("Failed to enqueue copper output email")
                 flash("Email notification failed; in-app notification saved.", "warning")
-            from core.models import create_notification, User
-            storekeeper_user = User.query.filter_by(role='store_keeper').first()
-            if storekeeper_user:
-                create_notification(
-                    user_id=storekeeper_user.id,
-                    type_='OUTPUT_CREATED',
-                    message=f"Stock output of {output_kg} kg for {stock.voucher_no} requires your processing.",
-                    related_type='output',
-                    related_id=out.id
-                )
+            
 
-            # --- EMAIL NOTIFICATION TO STOREKEEPER ---
-            from flask_mail import Message
-            from flask import current_app
-            from flask_login import current_user
-            from app import mail
-            storekeeper_email = [storekeeper_user.email] if storekeeper_user and storekeeper_user.email else ["storekeeper@example.com"]
-            output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {output_kg} kg, Customer: {customer}, Note: {note}"
-            msg = Message(
-                subject="Stock Output Request",
-                sender=current_app.config['MAIL_USERNAME'],
-                recipients=storekeeper_email
-            )
-            msg.body = f"""
-Dear Storekeeper,\n\nAccountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) has requested the following stock to be released:\n\n{output_details}\n\nPlease process this request.\n\nRegards,\nSmart Account Manager System
-            """
-            try:
-                # ensure any pending notifications are saved
-                db.session.commit()
-            except Exception:
-                pass
-            try:
-                mail.send(msg)
-            except Exception:
-                import logging
-                logging.exception("Failed to send copper output email (second)")
-                flash("Email notification failed; in-app notification saved.", "warning")
 
             flash(f"Output recorded ({output_kg} kg) for {stock.voucher_no}. Moyenne and Moyenne NB updated.", "success")
             return redirect(url_for("copper.record_output"))

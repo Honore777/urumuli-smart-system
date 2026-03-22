@@ -4,7 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Your Profile</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 </head>
 <body class="bg-slate-900 min-h-screen p-6">
     <div class="max-w-xl mx-auto bg-white rounded-xl shadow-2xl p-8">
@@ -59,7 +60,16 @@
             </div>
 
             <div class="flex items-center justify-between mt-4">
-                <a href="{{ url_for('entry_point') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back</a>
+                {% if current_user.role == 'boss' %}
+                    <a href="{{ url_for('boss.dashboard') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to Dashboard</a>
+                {% elif current_user.role == 'store_keeper' %}
+                    <a href="{{ url_for('core.store_dashboard') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to Dashboard</a>
+                {% elif current_user.role == 'accountant' %}
+                    <a href="{{ url_for('accountant.dashboard') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to Dashboard</a>
+                {% else %}
+                    <a href="{{ url_for('entry_point') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back</a>
+                {% endif %}
+
                 <button
                     type="submit"
                     class="inline-flex items-center rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700"

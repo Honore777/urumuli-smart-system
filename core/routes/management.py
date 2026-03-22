@@ -122,12 +122,32 @@ def boss_dashboard():
         status=PaymentReviewStatus.PENDING_REVIEW.value
     ).order_by(PaymentReview.created_at.desc()).all()
 
-    # Recent approvals/rejections (exclude pending), limited to 20
-    recent_reviews = PaymentReview.query.filter(
-        PaymentReview.status != PaymentReviewStatus.PENDING_REVIEW.value
-    ).order_by(
-        PaymentReview.created_at.desc()
-    ).limit(20).all()
+    # Recent approvals/rejections (exclude pending) - collapse multiple
+    # review records for the same payment into a single entry so that
+    # edits and their approvals appear as a single consolidated item.
+    from datetime import datetime as _dt
+    raw_reviews = (
+        PaymentReview.query
+        .filter(PaymentReview.status != PaymentReviewStatus.PENDING_REVIEW.value)
+        .order_by(PaymentReview.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    # Keep the most recent review per payment_id (fallback to review.id)
+    by_payment: dict = {}
+    for r in raw_reviews:
+        key = r.payment_id if r.payment_id is not None else f"rev-{r.id}"
+        best = by_payment.get(key)
+        # Determine recency using reviewed_at if present, otherwise created_at
+        r_time = r.reviewed_at or r.created_at
+        best_time = (best.reviewed_at or best.created_at) if best else None
+        if not best or (r_time and (not best_time or r_time > best_time)):
+            by_payment[key] = r
+    recent_reviews = sorted(
+        by_payment.values(),
+        key=lambda x: (x.reviewed_at or x.created_at) or _dt.min,
+        reverse=True,
+    )[:20]
 
     recent_plans = BulkOutputPlan.query.order_by(
         BulkOutputPlan.created_at.desc()

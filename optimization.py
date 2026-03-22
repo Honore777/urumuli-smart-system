@@ -35,7 +35,7 @@ def select_stocks_for_moyenne(target_moyenne=None, target_moyenne_nb=None):
     prob += lpSum(objective_terms)
 
     # Constraint: at least one stock must be selected
-    prob += lpSum(stock_vars[s.id] for s in remaining_stocks) >= 1
+    prob += lpSum(stock_vars[s.id] for s in remaining_stocks) >= 2
 
     # Solve
     prob.solve()

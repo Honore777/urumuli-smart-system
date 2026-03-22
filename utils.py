@@ -37,3 +37,55 @@ def calculate_total_balance(stocks):
     for s in stocks:
         total += s.net_balance
     return total
+
+
+# Async email helper
+from threading import Thread
+import threading as _threading
+import logging
+from flask import current_app
+
+
+def _send_async_email(app, mail, msg):
+    with app.app_context():
+        try:
+            mail.send(msg)
+        except Exception:
+            # use app logger to record failure
+            try:
+                app.logger.exception("Async mail send failed")
+            except Exception:
+                pass
+
+
+def send_email(mail, msg):
+    """Send `msg` using `mail` in a background thread to avoid blocking requests."""
+    try:
+        app = current_app._get_current_object()
+    except Exception:
+        # fallback: call synchronously if current_app not available
+        try:
+            mail.send(msg)
+        except Exception:
+            pass
+        return
+
+    # Log enqueue and active thread count for monitoring
+    try:
+        app.logger.info("Enqueuing email to %s", getattr(msg, 'recipients', None))
+    except Exception:
+        try:
+            logging.info("Enqueuing email to %s", getattr(msg, 'recipients', None))
+        except Exception:
+            pass
+
+    try:
+        # print active thread count to console for quick monitoring
+        count = _threading.active_count()
+        app.logger.info("Active threads before enqueue: %d", count)
+        print(f"[email] Active threads: {count}")
+    except Exception:
+        pass
+
+    t = Thread(target=_send_async_email, args=(app, mail, msg), daemon=True)
+    t.start()

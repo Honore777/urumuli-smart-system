@@ -15,13 +15,13 @@ class Config:
 
     # Database
     SQLALCHEMY_DATABASE_URI = os.environ.get(
-        'DATABASE_URL')
+        'DATABASE_URL_TESTING')
     
     SQLALCHEMY_TRACK_MODIFICATIONS = os.environ.get(
         'SQLALCHEMY_TRACK_MODIFICATIONS', 'False'
     ).lower() in ('1', 'true', 'yes')
 
-    SUPABASE_URL=os.environ.get('DATABASE_URL')
+    SUPABASE_URL=os.environ.get('DATABASE_URL_TESTING')
 
     # Mail
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')

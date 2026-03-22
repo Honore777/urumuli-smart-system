@@ -78,6 +78,7 @@ def record_output():
             from flask import current_app
             from flask_login import current_user
             from app import mail
+            from utils import send_email
             storekeeper_email = [storekeeper_user.email] if storekeeper_user and storekeeper_user.email else ["storekeeper@example.com"]
             output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {form.output_kg.data} kg, Customer: {form.customer.data}, Note: {form.note.data}"
             msg = Message(
@@ -89,10 +90,10 @@ def record_output():
     Dear Storekeeper,\n\nAccountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) has requested the following cassiterite stock to be released:\n\n{output_details}\n\nPlease process this request.\n\nRegards,\nSmart Account Manager System
             """
             try:
-                mail.send(msg)
+                send_email(mail, msg)
             except Exception:
                 import logging
-                logging.exception("Failed to send cassiterite output email")
+                logging.exception("Failed to enqueue cassiterite output email")
                 flash("Email notification failed; in-app notification saved.", "warning")
 
         flash(f"Output of {form.output_kg.data}kg recorded!", "success")

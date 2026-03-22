@@ -51,6 +51,7 @@ def pay_supplier():
     from app import mail
     from flask_login import current_user
     from core.models import PaymentReview, create_notification, User
+    from utils import send_email
     from copper.forms import SupplierPaymentForm
 
     form = SupplierPaymentForm()
@@ -82,17 +83,30 @@ def pay_supplier():
             db.session.add(payment)
             db.session.commit()
 
-            # create review
-            review = PaymentReview(
-                mineral_type='coltan',
-                type='utanga ibicuruzwa',
-                customer=stock.supplier,
-                amount=amount,
-                currecy='RWF',
+            # create or update a pending PaymentReview for this payment
+            from core.models import PaymentReviewStatus
+            existing = PaymentReview.query.filter_by(
                 payment_id=payment.id,
-                created_by_id=getattr(current_user, 'id', None),
-            )
-            db.session.add(review)
+                status=PaymentReviewStatus.PENDING_REVIEW.value,
+            ).first()
+            if existing:
+                existing.mineral_type = 'coltan'
+                existing.type = 'utanga ibicuruzwa'
+                existing.customer = stock.supplier
+                existing.amount = amount
+                existing.currency = 'RWF'
+                existing.created_by_id = getattr(current_user, 'id', None)
+            else:
+                review = PaymentReview(
+                    mineral_type='coltan',
+                    type='utanga ibicuruzwa',
+                    customer=stock.supplier,
+                    amount=amount,
+                    currency='RWF',
+                    payment_id=payment.id,
+                    created_by_id=getattr(current_user, 'id', None),
+                )
+                db.session.add(review)
             db.session.commit()
 
             # in-app notification
@@ -124,7 +138,7 @@ def pay_supplier():
                 f"yasabye kwemeza ubwishyu bukurikira kuri Coltan:\n\n{payment_details}\n\nNyamuneka musuzume kandi mwemeze.\nMujye muri Sisiteme kwemeza iki gikorwa\nMurakoze,\n Urumuli Smart System"
             )
             try:
-                mail.send(msg)
+                send_email(mail, msg)
             except Exception:
                 import logging
                 logging.exception("Failed to send supplier payment email")
@@ -191,16 +205,31 @@ def pay_worker():
             )
             db.session.add(payment)
             db.session.commit()
+            db.session.flush()  # ensure payment.id is populated
 
-            review = PaymentReview(
-                type='umukozi',
-                customer=form.worker_name.data,
-                amount=form.amount.data,
-                currency='RWF',
+            # upsert pending review for this worker payment
+            from core.models import PaymentReviewStatus
+            existing = PaymentReview.query.filter_by(
                 payment_id=payment.id,
-                created_by_id=getattr(current_user, 'id', None),
-            )
-            db.session.add(review)
+                status=PaymentReviewStatus.PENDING_REVIEW.value,
+            ).first()
+            if existing:
+                existing.mineral_type = None
+                existing.type = 'umukozi'
+                existing.customer = form.worker_name.data
+                existing.amount = form.amount.data
+                existing.currency = 'RWF'
+                existing.created_by_id = getattr(current_user, 'id', None)
+            else:
+                review = PaymentReview(
+                    type='umukozi',
+                    customer=form.worker_name.data,
+                    amount=form.amount.data,
+                    currency='RWF',
+                    payment_id=payment.id,
+                    created_by_id=getattr(current_user, 'id', None),
+                )
+                db.session.add(review)
             db.session.commit()
 
             boss_user = User.query.filter_by(role='boss').first()
@@ -214,6 +243,8 @@ def pay_worker():
                 )
             # Persist in-app notification before attempting email
             db.session.commit()
+
+            from utils import send_email
 
             boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
             payment_details = (
@@ -230,7 +261,7 @@ def pay_worker():
                 f"yasabye kwemeza ubwishyu bukurikira :\n\n{payment_details}\n\n musuzume kandi mwemeze.\n\nMurakoze,\n Mujye Muri system kwemeza iki gikorwa.\n Urumuli Smart System"
             )
             try:
-                mail.send(msg)
+                send_email(mail, msg)
             except Exception:
                 import logging
                 logging.exception("Failed to send worker payment email")
@@ -276,22 +307,38 @@ def edit_supplier_payment(payment_id):
             payment.note = form.note.data
             db.session.add(payment)
             db.session.commit()
+            db.session.flush()  # ensure payment.id is populated for the review record  
             # Create a new PaymentReview for the boss to review this change.
             # We keep existing review rows untouched (they represent what was
             # previously recorded) and create a fresh PENDING_REVIEW entry
             # that contains the new values and the accountant's reason.
             from flask_login import current_user
-            review = PaymentReview(
-                mineral_type='coltan',
-                type='Utanga amabuye',
-                customer=stock.supplier,
-                amount=payment.amount,
-                currency='RWF',
+            # upsert pending review for this edited supplier payment (include change reason)
+            from core.models import PaymentReviewStatus
+            existing = PaymentReview.query.filter_by(
                 payment_id=payment.id,
-                created_by_id=getattr(current_user, 'id', None),
-                boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
-            )
-            db.session.add(review)
+                status=PaymentReviewStatus.PENDING_REVIEW.value,
+            ).first()
+            if existing:
+                existing.mineral_type = 'coltan'
+                existing.type = 'Utanga amabuye'
+                existing.customer = stock.supplier
+                existing.amount = payment.amount
+                existing.currency = 'RWF'
+                existing.created_by_id = getattr(current_user, 'id', None)
+                existing.boss_comment = (f"Edit requested: {form.change_reason.data.strip()}")
+            else:
+                review = PaymentReview(
+                    mineral_type='coltan',
+                    type='Utanga amabuye',
+                    customer=stock.supplier,
+                    amount=payment.amount,
+                    currency='RWF',
+                    payment_id=payment.id,
+                    created_by_id=getattr(current_user, 'id', None),
+                    boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
+                )
+                db.session.add(review)
             # in-app notification and email to boss
             from core.models import create_notification, User
             boss_user = User.query.filter_by(role='boss').first()
@@ -323,7 +370,7 @@ def edit_supplier_payment(payment_id):
                     "Murakoze, \nMujye Muri system kwemeza iki gikorwa.\n Urumuli  Smart System"
                 )
                 try:
-                    mail.send(msg)
+                    send_email(mail, msg)
                 except Exception:
                     import logging
                     logging.exception("Failed to send supplier edit email")
@@ -365,17 +412,32 @@ def delete_supplier_payment(payment_id):
         # Create a PaymentReview so the boss can approve the deletion.
         from flask_login import current_user
         from core.models import create_notification, User
-        review = PaymentReview(
-            mineral_type='coltan',
-            type='Utanga amabuye',
-            customer=stock.supplier,
-            amount=payment.amount,
-            currency='RWF',
+        # upsert pending review for delete-request
+        from core.models import PaymentReviewStatus
+        existing = PaymentReview.query.filter_by(
             payment_id=payment.id,
-            created_by_id=getattr(current_user, 'id', None),
-            boss_comment=(f"Delete requested: {reason.strip()}"),
-        )
-        db.session.add(review)
+            status=PaymentReviewStatus.PENDING_REVIEW.value,
+        ).first()
+        if existing:
+            existing.mineral_type = 'coltan'
+            existing.type = 'Utanga amabuye'
+            existing.customer = stock.supplier
+            existing.amount = payment.amount
+            existing.currency = 'RWF'
+            existing.created_by_id = getattr(current_user, 'id', None)
+            existing.boss_comment = (f"Delete requested: {reason.strip()}")
+        else:
+            review = PaymentReview(
+                mineral_type='coltan',
+                type='Utanga amabuye',
+                customer=stock.supplier,
+                amount=payment.amount,
+                currency='RWF',
+                payment_id=payment.id,
+                created_by_id=getattr(current_user, 'id', None),
+                boss_comment=(f"Delete requested: {reason.strip()}"),
+            )
+            db.session.add(review)
         boss_user = User.query.filter_by(role='boss').first()
         if boss_user:
             create_notification(
@@ -425,17 +487,32 @@ def edit_worker_payment(payment_id):
             # Create a PENDING review for the boss to inspect this edit
             from flask_login import current_user
             from core.models import create_notification, User
-            review = PaymentReview(
-                mineral_type=None,
-                type='Umukozi',
-                customer=payment.worker_name,
-                amount=payment.amount,
-                currency='RWF',
+            # upsert pending review for edited worker payment
+            from core.models import PaymentReviewStatus
+            existing = PaymentReview.query.filter_by(
                 payment_id=payment.id,
-                created_by_id=getattr(current_user, 'id', None),
-                boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
-            )
-            db.session.add(review)
+                status=PaymentReviewStatus.PENDING_REVIEW.value,
+            ).first()
+            if existing:
+                existing.mineral_type = None
+                existing.type = 'Umukozi'
+                existing.customer = payment.worker_name
+                existing.amount = payment.amount
+                existing.currency = 'RWF'
+                existing.created_by_id = getattr(current_user, 'id', None)
+                existing.boss_comment = (f"Edit requested: {form.change_reason.data.strip()}")
+            else:
+                review = PaymentReview(
+                    mineral_type=None,
+                    type='Umukozi',
+                    customer=payment.worker_name,
+                    amount=payment.amount,
+                    currency='RWF',
+                    payment_id=payment.id,
+                    created_by_id=getattr(current_user, 'id', None),
+                    boss_comment=(f"Edit requested: {form.change_reason.data.strip()}"),
+                )
+                db.session.add(review)
             boss_user = User.query.filter_by(role='boss').first()
             if boss_user:
                 create_notification(
@@ -477,17 +554,32 @@ def delete_worker_payment(payment_id):
     try:
         from flask_login import current_user
         from core.models import create_notification, User
-        review = PaymentReview(
-            mineral_type=None,
-            type='Umukozi',
-            customer=payment.worker_name,
-            amount=payment.amount,
-            currency='RWF',
+        # upsert pending review for worker delete request
+        from core.models import PaymentReviewStatus
+        existing = PaymentReview.query.filter_by(
             payment_id=payment.id,
-            created_by_id=getattr(current_user, 'id', None),
-            boss_comment=(f"Delete requested: {reason.strip()}"),
-        )
-        db.session.add(review)
+            status=PaymentReviewStatus.PENDING_REVIEW.value,
+        ).first()
+        if existing:
+            existing.mineral_type = None
+            existing.type = 'Umukozi'
+            existing.customer = payment.worker_name
+            existing.amount = payment.amount
+            existing.currency = 'RWF'
+            existing.created_by_id = getattr(current_user, 'id', None)
+            existing.boss_comment = (f"Delete requested: {reason.strip()}")
+        else:
+            review = PaymentReview(
+                mineral_type=None,
+                type='Umukozi',
+                customer=payment.worker_name,
+                amount=payment.amount,
+                currency='RWF',
+                payment_id=payment.id,
+                created_by_id=getattr(current_user, 'id', None),
+                boss_comment=(f"Delete requested: {reason.strip()}"),
+            )
+            db.session.add(review)
         boss_user = User.query.filter_by(role='boss').first()
         if boss_user:
             create_notification(
