@@ -642,7 +642,9 @@
             if (!modal || !form || !stock) return;
 
             const id = stock.id;
-            form.action = `{{ url_for('copper.edit_stock', stock_id=0)[:-1] }}${id}`;
+            // Build edit URL by replacing the placeholder '/0/' with the actual id
+            const baseEditUrl = "{{ url_for('copper.edit_stock', stock_id=0) }}";
+            form.action = baseEditUrl.replace('/0/', `/${id}/`);
 
             document.getElementById('edit-copper-date').value = stock.date || '';
             document.getElementById('edit-copper-voucher').value = stock.voucher_no || '';
@@ -702,7 +704,9 @@
                     if (!id) return;
                     if (!confirm('Are you sure you want to delete this copper stock?')) return;
                     if (!deleteForm) return;
-                    deleteForm.action = `{{ url_for('copper.delete_stock', stock_id=0)[:-1] }}${id}`;
+                    // Use a stable base URL and replace the placeholder segment '/0/' with the actual id
+                    const baseDeleteUrl = "{{ url_for('copper.delete_stock', stock_id=0) }}";
+                    deleteForm.action = baseDeleteUrl.replace('/0/', `/${id}/`);
                     deleteForm.submit();
                 }
             });
