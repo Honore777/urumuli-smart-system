@@ -15,7 +15,7 @@ class Config:
 
     # Database
     SQLALCHEMY_DATABASE_URI = os.environ.get(
-        'DATABASE_URL')
+        'DATABASE_URL_TESTING')
     
     SQLALCHEMY_TRACK_MODIFICATIONS = os.environ.get(
         'SQLALCHEMY_TRACK_MODIFICATIONS', 'False'
@@ -29,7 +29,7 @@ class Config:
     BREVO_SENDER_NAME = os.environ.get('BREVO_SENDER_NAME', 'Urumuli Smart System')
 
     # Optional Supabase (useful for storage/auth separate from DB)
-    SUPABASE_URL = os.environ.get('SUPABASE_URL')
+    SUPABASE_URL = os.environ.get('SUPABASE_URL_TESTING')
     SUPABASE_KEY = os.environ.get('SERVICE_KEY')
 
     # SQLAlchemy engine options for robust connections (adjust pool_size for production)

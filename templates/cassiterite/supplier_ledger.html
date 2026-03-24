@@ -79,8 +79,8 @@
                         <td class="px-4 py-2 text-right {{ 'text-green-600 font-semibold' if entry.credit > 0 else '' }}">
                             {% if entry.credit > 0 %}{{ '{:,.2f}'.format(entry.credit) }}{% endif %}
                         </td>
-                        <td class="px-4 py-2 text-right font-bold {{ 'text-orange-600' if entry.balance > 0 else 'text-green-600' }}">
-                            {{ '{:,.2f}'.format(entry.balance) }}
+                        <td class="px-4 py-2 text-right font-bold {{ 'text-orange-600' if entry.get('balance', 0) > 0 else 'text-green-600' }}">
+                            {{ '{:,.2f}'.format(entry.get('balance', 0)) }}
                         </td>
                         <td class="px-4 py-2 text-center">
                             {% if entry.is_payment %}
