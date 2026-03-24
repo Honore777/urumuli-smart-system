@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cassiterite Pay Supplier</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
 </head>
 <body class="bg-gray-50 min-h-screen p-6">
     <div class="max-w-6xl mx-auto">
@@ -86,10 +87,10 @@
                     {% for s in supplier_summaries %}
                     <tr class="hover:bg-gray-100">
                         <td class="px-4 py-2 font-semibold">{{ s.supplier }}</td>
-                        <td class="px-4 py-2 text-right">${{ '{:,.2f}'.format(s.owed or 0) }}</td>
-                        <td class="px-4 py-2 text-right text-green-600">${{ '{:,.2f}'.format(s.paid or 0) }}</td>
+                        <td class="px-4 py-2 text-right">{{ '{:,.2f}'.format(s.owed or 0) }}</td>
+                        <td class="px-4 py-2 text-right text-green-600">{{ '{:,.2f}'.format(s.paid or 0) }}</td>
                         <td class="px-4 py-2 text-right font-bold {{ 'text-red-600' if s.remaining > 0 else 'text-green-600' }}">
-                            ${{ '{:,.2f}'.format(s.remaining or 0) }}
+                            {{ '{:,.2f}'.format(s.remaining or 0) }}
                         </td>
                         <td class="px-4 py-2 text-center">
                             <a href="{{ url_for('cassiterite.cassiterite_supplier_ledger', supplier=s.supplier) }}" 

@@ -1,12 +1,30 @@
 from pulp import LpProblem, LpVariable, lpSum, LpMinimize, LpBinary, LpContinuous
 from copper.models import CopperStock
+from sqlalchemy import func
+from types import SimpleNamespace
+from config import db
+import logging
+from utils import trace_time
 
+logger = logging.getLogger(__name__)
+
+@trace_time
 def select_stocks_for_moyenne(target_moyenne=None, target_moyenne_nb=None):
     """
     Original function: Binary selection (all or nothing per stock)
     Used for initial auto-filtering
     """
-    remaining_stocks = [s for s in CopperStock.query.all() if s.local_balance > 0]
+    rows = db.session.query(
+        CopperStock.id,
+        CopperStock.unit_percent,
+        CopperStock.local_balance,
+        CopperStock.t_unity,
+    ).filter(CopperStock.local_balance > 0).all()
+
+    if not rows:
+        return [], 0, 0
+
+    remaining_stocks = [SimpleNamespace(id=r[0], unit_percent=float(r[1] or 0), local_balance=float(r[2] or 0), t_unity=float(r[3] or 0)) for r in rows]
     stock_vars = {s.id: LpVariable(f"stock{s.id}", cat=LpBinary) for s in remaining_stocks}
 
     prob = LpProblem("Stock_selection_for_Target_Moyenne", LpMinimize)
@@ -35,19 +53,26 @@ def select_stocks_for_moyenne(target_moyenne=None, target_moyenne_nb=None):
     prob += lpSum(objective_terms)
 
     # Constraint: at least one stock must be selected
-    prob += lpSum(stock_vars[s.id] for s in remaining_stocks) >= 2
+    prob += lpSum(stock_vars[s.id] for s in remaining_stocks) >= 1
 
     # Solve
     prob.solve()
 
-    selected_stocks = [s for s in remaining_stocks if stock_vars[s.id].value() == 1]
+    selected_ids = [s_id for s_id, var in stock_vars.items() if var.value() == 1]
 
-    total_unit = sum(s.unit_percent for s in selected_stocks)
-    total_tunity = sum(s.t_unity for s in selected_stocks)
-    total_balance_val = sum(s.local_balance for s in selected_stocks)
+    if not selected_ids:
+        return [], 0, 0
 
-    achieved_moyenne = total_unit / total_balance_val if total_balance_val else 0
-    achieved_moyenne_nb = total_tunity / total_balance_val if total_balance_val else 0
+    # Rehydrate selected stocks ORM objects (for display) but compute aggregates using DB
+    selected_stocks = CopperStock.query.filter(CopperStock.id.in_(selected_ids)).all()
+
+    # Use DB aggregates for totals to avoid Python-side full-table sums
+    total_unit = db.session.query(func.coalesce(func.sum(CopperStock.unit_percent), 0)).filter(CopperStock.id.in_(selected_ids)).scalar() or 0
+    total_tunity = db.session.query(func.coalesce(func.sum(CopperStock.t_unity), 0)).filter(CopperStock.id.in_(selected_ids)).scalar() or 0
+    total_balance_val = db.session.query(func.coalesce(func.sum(CopperStock.local_balance), 0)).filter(CopperStock.id.in_(selected_ids)).scalar() or 0
+
+    achieved_moyenne = (total_unit / total_balance_val) if total_balance_val else 0
+    achieved_moyenne_nb = (total_tunity / total_balance_val) if total_balance_val else 0
 
     return selected_stocks, achieved_moyenne, achieved_moyenne_nb
 
@@ -75,36 +100,32 @@ def select_stocks_with_minimum_quantities(target_moyenne=None, target_moyenne_nb
     Returns:
         (selected_stocks_list, achieved_moyenne, achieved_moyenne_nb, quantities_dict)
     """
-    remaining_stocks = [s for s in CopperStock.query.all() if s.local_balance > 0]
-    
-    if not remaining_stocks:
+    # Load only the columns needed for LP; rehydrate selected ORM objects later
+    rows = db.session.query(
+        CopperStock.id,
+        CopperStock.local_balance,
+        CopperStock.unit_percent,
+        CopperStock.t_unity,
+    ).filter(CopperStock.local_balance > 0).all()
+
+    if not rows:
         return [], 0, 0, {}
-    
-    # ===== HYBRID APPROACH: Mix binary and continuous =====
-    # User-specified stocks: CONTINUOUS (can have decimals since user knows)
-    # Other stocks: BINARY (0 or 1, representing "all or nothing")
+
+    remaining_stocks = [SimpleNamespace(id=r[0], local_balance=float(r[1] or 0), unit_percent=float(r[2] or 0), t_unity=float(r[3] or 0)) for r in rows]
+
+    # HYBRID: mix continuous and binary variables
     stock_vars = {}
-    
     for s in remaining_stocks:
         if minimum_quantities and s.id in minimum_quantities:
-            # This stock has user-specified minimum quantity
-            # Use CONTINUOUS: can be 150kg, 150.5kg, 150.9kg, etc.
             min_qty = minimum_quantities[s.id]
             stock_vars[s.id] = LpVariable(
                 f"stock{s.id}",
-                lowBound=min_qty,        # User's minimum (exact)
-                upBound=min_qty, # min_quantity or Maximum available(when appropriate)
-                cat=LpContinuous         # Decimals OK (user specified)
+                lowBound=min_qty,
+                upBound=min(min_qty, s.local_balance) if s.local_balance else min_qty,
+                cat=LpContinuous,
             )
         else:
-            # This stock is NOT specified by user
-            # Use BINARY: either 0 (don't use) or 1 (use all available)
-            # Result will be: 0 * s.local_balance = 0 kg
-            #            or: 1 * s.local_balance = ALL kg (no decimals!)
-            stock_vars[s.id] = LpVariable(
-                f"stock{s.id}",
-                cat=LpBinary  # 0 or 1 only - NO decimals!
-            )
+            stock_vars[s.id] = LpVariable(f"stock{s.id}", cat=LpBinary)
     
     prob = LpProblem("Stock_selection_with_minimums_hybrid", LpMinimize)
     
@@ -170,32 +191,37 @@ def select_stocks_with_minimum_quantities(target_moyenne=None, target_moyenne_nb
     
     for s in remaining_stocks:
         var_value = stock_vars[s.id].value()
-        
         if var_value is None:
             continue
-            
         if minimum_quantities and s.id in minimum_quantities:
-            # Continuous variable: use value directly (already in kg)
             qty = var_value
         else:
-            # Binary variable: multiply by available balance
-            # If value=1, qty = s.local_balance (use all)
-            # If value=0, qty = 0 (use none)
             qty = var_value * s.local_balance
-        
-        if qty and qty > 0.01:  # More than 0.01kg
-            selected_stocks.append(s)
+        if qty and qty > 0.01:
             quantities[s.id] = qty
-    
-    # Calculate achieved quality metrics
-    # Formula: percentage = unit_percent / local_balance
-    # Then: contribution = percentage * quantity_used
-    # Moyenne = sum(contributions) / sum(quantities)
-    total_unit = sum((s.unit_percent / s.local_balance if s.local_balance > 0 else 0) * quantities.get(s.id, 0) for s in selected_stocks)
-    total_tunity = sum((s.t_unity / s.local_balance if s.local_balance > 0 else 0) * quantities.get(s.id, 0) for s in selected_stocks)
-    total_qty = sum(quantities.get(s.id, 0) for s in selected_stocks)
-    
-    achieved_moyenne = total_unit / total_qty if total_qty else 0
-    achieved_moyenne_nb = total_tunity / total_qty if total_qty else 0
-    
+
+    selected_ids = list(quantities.keys())
+    # Rehydrate only needed columns to compute achieved metrics
+    rows = db.session.query(CopperStock.id, CopperStock.unit_percent, CopperStock.t_unity, CopperStock.local_balance).filter(CopperStock.id.in_(selected_ids)).all()
+    # Map by id for quick lookup
+    row_map = {r[0]: {'unit_percent': float(r[1] or 0), 't_unity': float(r[2] or 0), 'local_balance': float(r[3] or 0)} for r in rows}
+
+    total_unit = 0.0
+    total_tunity = 0.0
+    total_qty = 0.0
+    for sid, qty in quantities.items():
+        meta = row_map.get(sid)
+        if not meta:
+            continue
+        lb = meta['local_balance']
+        if lb > 0:
+            total_unit += (meta['unit_percent'] / lb) * qty
+            total_tunity += (meta['t_unity'] / lb) * qty
+            total_qty += qty
+
+    achieved_moyenne = (total_unit / total_qty) if total_qty else 0
+    achieved_moyenne_nb = (total_tunity / total_qty) if total_qty else 0
+
+    # Rehydrate ORM objects for display
+    selected_stocks = CopperStock.query.filter(CopperStock.id.in_(selected_ids)).all()
     return selected_stocks, achieved_moyenne, achieved_moyenne_nb, quantities

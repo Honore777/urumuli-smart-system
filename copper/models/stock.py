@@ -5,6 +5,7 @@ Stores quantities, suppliers, and derived calculations.
 """
 from datetime import datetime
 from config import db
+from sqlalchemy import func
 from utils import calculate_unit_percentage, calculate_net_balance, calculate_moyenne
 
 
@@ -66,18 +67,24 @@ class CopperStock(db.Model):
 
     def remaining_stock(self):
         """Calculate remaining stock after outputs"""
-        outputs_total = sum(o.output_kg for o in self.outputs or [])
+        # Use a DB-side aggregate to avoid loading all output rows into Python
+        from .output import CopperOutput
+        outputs_total = db.session.query(func.coalesce(func.sum(CopperOutput.output_kg), 0)).filter(CopperOutput.stock_id == self.id).scalar() or 0
         return (self.input_kg or 0) - outputs_total
 
     def remaining_to_pay(self):
         """Calculate remaining amount to pay supplier"""
-        total_paid = sum(p.amount for p in self.supplier_payments or [])
+        # Use a DB-side aggregate to avoid loading payment rows into Python
+        from .payment import SupplierPayment
+        total_paid = db.session.query(func.coalesce(func.sum(SupplierPayment.amount), 0)).filter(SupplierPayment.stock_id == self.id).scalar() or 0
         return (self.net_balance or 0) - total_paid
 
-    def update_calculations(self, previous_stocks):
+    def update_calculations(self):
         """
-        Recalculate all computed fields for this stock.
-        Called after stock entry or output changes.
+        Recalculate all computed fields for this stock using DB-side aggregates
+        where possible. This avoids loading all previous rows into Python and
+        ensures we only consider stocks with `local_balance > 0` when computing
+        cumulative and moyenne figures.
         """
         # Step 1: ensure defaults
         for field in ['input_kg', 'amount', 'tot_amount_tag', 'rma', 'inkomane', 'nb', 'percentage']:
@@ -95,13 +102,23 @@ class CopperStock(db.Model):
         # Step 5: net balance
         self.net_balance = calculate_net_balance(self)
 
-        # Step 6: rolling total balance
-        previous_total_balance = sum((s.net_balance or 0) for s in previous_stocks)
-        self.total_balance = previous_total_balance + self.net_balance
+        # Step 6: rolling total balance (DB-side aggregate over prior stocks)
+        prev_total_q = db.session.query(func.coalesce(func.sum(CopperStock.net_balance), 0)).filter(
+            CopperStock.date <= self.date,
+            CopperStock.id != self.id,
+            CopperStock.local_balance > 0
+        )
+        previous_total_balance = prev_total_q.scalar() or 0
+        self.total_balance = previous_total_balance + (self.net_balance or 0)
 
-        # Step 7: total local balance
-        previous_total_local = sum((s.local_balance or 0) for s in previous_stocks)
-        self.total_local_balance = previous_total_local + self.local_balance
+        # Step 7: total local balance (DB-side)
+        prev_local_q = db.session.query(func.coalesce(func.sum(CopperStock.local_balance), 0)).filter(
+            CopperStock.date <= self.date,
+            CopperStock.id != self.id,
+            CopperStock.local_balance > 0
+        )
+        previous_total_local = prev_local_q.scalar() or 0
+        self.total_local_balance = previous_total_local + (self.local_balance or 0)
 
         # Step 8: update global moyenne and moyenne_nb
         CopperStock.update_global_moyennes()
@@ -109,28 +126,19 @@ class CopperStock(db.Model):
     @staticmethod
     def update_global_moyennes():
         """Recalculate MOYENNE and MOYENNE_NB across all remaining copper stocks."""
-        all_stocks = CopperStock.query.all()
-        if not all_stocks:
-            return
+        # Compute aggregates in the DB for remaining stocks to avoid loading
+        total_unit_percent = db.session.query(func.coalesce(func.sum(CopperStock.unit_percent), 0)).filter(CopperStock.local_balance > 0).scalar()
+        total_remaining_balance = db.session.query(func.coalesce(func.sum(CopperStock.local_balance), 0)).filter(CopperStock.local_balance > 0).scalar()
+        if not total_remaining_balance:
+            moyenne = 0
+            moyenne_nb = 0
+        else:
+            moyenne = total_unit_percent / total_remaining_balance
+            total_t_unity = db.session.query(func.coalesce(func.sum(CopperStock.t_unity), 0)).filter(CopperStock.local_balance > 0).scalar()
+            moyenne_nb = total_t_unity / total_remaining_balance
 
-        remaining_stocks = [s for s in all_stocks if s.local_balance > 0]
-
-        # Ensure no None values break calculations
-        for s in remaining_stocks:
-            s.unit_percent = s.unit_percent or 0.0
-            s.t_unity = s.t_unity or 0.0
-
-        total_unit_percent = sum(s.unit_percent for s in remaining_stocks)
-        total_remaining_balance = sum(s.local_balance for s in remaining_stocks)
-        moyenne = total_unit_percent / total_remaining_balance if total_remaining_balance else 0
-
-        total_t_unity = sum(s.t_unity for s in remaining_stocks)
-        moyenne_nb = total_t_unity / total_remaining_balance if total_remaining_balance else 0
-
-        # Update all stocks
-        for s in all_stocks:
-            s.moyenne = moyenne
-            s.moyenne_nb = moyenne_nb
-        
-        # NOTE: Do NOT commit here - let calling function handle commits
-        # This allows multiple updates before a single final commit
+        # Bulk-update all rows with the new moyennes (no commit here)
+        db.session.query(CopperStock).update({
+            CopperStock.moyenne: moyenne,
+            CopperStock.moyenne_nb: moyenne_nb,
+        }, synchronize_session=False)

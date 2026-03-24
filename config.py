@@ -23,14 +23,10 @@ class Config:
 
     SUPABASE_URL=os.environ.get('DATABASE_URL')
 
-    # Mail
-    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
-    MAIL_PORT = int(os.environ.get('MAIL_PORT', '587'))
-    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
-    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
-    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'True').lower() in ('1', 'true', 'yes')
-    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'False').lower() in ('1', 'true', 'yes')
-    MAIL_DEFAULT_SENDER = os.environ.get('MAIL_DEFAULT_SENDER', MAIL_USERNAME)
+    # Brevo (Transactional email) configuration
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY')
+    BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL')
+    BREVO_SENDER_NAME = os.environ.get('BREVO_SENDER_NAME', 'Urumuli Smart System')
 
     # Optional Supabase (useful for storage/auth separate from DB)
     SUPABASE_URL = os.environ.get('SUPABASE_URL')
@@ -44,3 +40,12 @@ class Config:
         'pool_timeout': int(os.environ.get('POOL_TIMEOUT', '35')),
         'pool_recycle': int(os.environ.get('POOL_RECYCLE', '400')),
     }
+
+    # Logging configuration (controlled by env vars)
+    LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO').upper()
+    LOG_FILE = os.environ.get('LOG_FILE', 'logs/app.log')
+    LOG_MAX_BYTES = int(os.environ.get('LOG_MAX_BYTES', '10485760'))
+    LOG_BACKUP_COUNT = int(os.environ.get('LOG_BACKUP_COUNT', '5'))
+    LOG_FORMAT = os.environ.get('LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # Optionally enable SQL echoing for short profiling runs
+    SQLALCHEMY_ECHO = os.environ.get('SQLALCHEMY_ECHO', 'False').lower() in ('1', 'true', 'yes')

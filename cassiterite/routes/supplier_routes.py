@@ -9,6 +9,7 @@ from cassiterite.routes import cassiterite_bp
 from core.auth import role_required
 from flask import url_for, flash
 from config import db
+from sqlalchemy import func
 
 @cassiterite_bp.route("/pay_worker", methods=["GET", "POST"])
 @role_required("accountant")
@@ -71,40 +72,27 @@ def pay_worker():
 			# Persist in-app notification before attempting email
 			db.session.commit()
 
-			# --- EMAIL NOTIFICATION TO BOSS ---
-			from flask_mail import Message
+			# --- EMAIL NOTIFICATION TO BOSS (Brevo) ---
 			from flask import current_app
-			from app import mail
-			from utils import send_email
+			from utils import send_brevo_email_async
 			boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
 			payment_details = (
 				f"Umukozi: {form.worker_name.data}, Amafaranga: {form.amount.data} RWF, Uburyo: {form.method.data}, "
 				f"Reference: {form.reference.data}, Impamvu: {form.note.data}"
 			)
-			msg = Message(
-				subject="Gusaba Kwemeza Igikorwa: Kwishyura Umukozi",
-				sender=current_app.config['MAIL_USERNAME'],
-				recipients=boss_email
+			subject = "Gusaba Kwemeza Igikorwa: Kwishyura Umukozi"
+			html_content = (
+				"<p>Nyakubahwa Muyobozi,</p>"
+				f"<p>Umucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) yasabye kwemeza ubwishyu bukurikira :</p>"
+				f"<p>{payment_details}</p>"
+				"<p>Musuzume kandi mwemeze.</p>"
+				"<p>Mujye Muri Sisiteme kwemeza iki gikorwa.<br>Murakoze,<br>Urumuli Smart System</p>"
 			)
-			msg.body = f"""
-Nyakubahwa Muyobozi,
-
-Umucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) yasabye kwemeza ubwishyu bukurikira :
-
-{payment_details}
-
- Musuzume kandi mwemeze.
-
-Mujye Muri Sisiteme kwemeza iki gikorwa.
-
-Murakoze,
-Urumuli Smart System
-			"""
 			try:
-				send_email(mail, msg)
+				send_brevo_email_async(subject, html_content, boss_email)
 			except Exception as e:
 				import logging
-				logging.exception("Failed to enqueue worker payment email notification")
+				logging.exception("Failed to enqueue worker payment email notification via Brevo")
 				flash("Email notification failed; in-app notification saved.", "warning")
 
 			flash(f"Payment of {form.amount.data} RWF recorded for {form.worker_name.data}.", "success")
@@ -138,14 +126,21 @@ def pay_supplier():
 
 	form = CassiteriteSupplierPaymentForm()
 
-	# Populate stock choices with stocks that still have balance to pay
-	stocks = (
-		CassiteriteStock.query
+	# Populate stock choices with stocks that still have balance to pay.
+	# Only select needed columns to avoid loading full model objects.
+	stock_rows = (
+		db.session.query(
+			CassiteriteStock.id,
+			CassiteriteStock.voucher_no,
+			CassiteriteStock.supplier,
+			CassiteriteStock.balance_to_pay,
+		)
 		.filter(CassiteriteStock.balance_to_pay > 0)
+		.order_by(CassiteriteStock.date.desc())
 		.all()
 	)
 	form.stock_id.choices = [
-		(stock.id, f"{stock.voucher_no} - {stock.supplier}") for stock in stocks
+		(row.id, f"{row.voucher_no} - {row.supplier}") for row in stock_rows
 	]
 
 	if form.validate_on_submit():
@@ -159,116 +154,118 @@ def pay_supplier():
 			)
 			return redirect(url_for("cassiterite.pay_supplier"))
 
-		
+		try:
+			payment = CassiteriteSupplierPayment(
+				stock_id=stock.id,
+				amount=amount,
+				method=form.method.data,
+				reference=form.reference.data,
+				note=form.note.data,
+			)
+			db.session.add(payment)
+			db.session.commit()
+
+			# --- upsert PaymentReview for supplier payment (cassiterite) ---
+			from flask_login import current_user
+			from core.models import PaymentReview, PaymentReviewStatus
+			existing = PaymentReview.query.filter_by(
+				payment_id=payment.id,
+				status=PaymentReviewStatus.PENDING_REVIEW.value,
+			).first()
+			if existing:
+				existing.mineral_type = 'cassiterite'
+				existing.type = 'Utanga ibicuruzwa'
+				existing.customer = stock.supplier
+				existing.amount = amount
+				existing.currency = 'RWF'
+				existing.created_by_id = getattr(current_user, 'id', None)
+			else:
+				review = PaymentReview(
+					mineral_type='cassiterite',
+					type='Utanga ibicuruzwa',
+					customer=stock.supplier,
+					amount=amount,
+					currency='RWF',
+					payment_id=payment.id,
+					created_by_id=getattr(current_user, 'id', None)
+				)
+				db.session.add(review)
+			db.session.commit()
+
+			# --- IN-APP NOTIFICATION TO BOSS ---
+			from core.models import create_notification, User
+			boss_user = User.query.filter_by(role='boss').first()
+			if boss_user:
+				create_notification(
+					user_id=boss_user.id,
+					type_='Kwishyura utanga ibicuruzwa',
+					message=f"Hasabwe kwemeza: Kwishyura utanga ibicuruzwa kuri Gasegereti - {stock.supplier}, Amafaranga: {amount} RWF.",
+					related_type='Kwishyura utanga ibicuruzwa(gasegereti)',
+					related_id=payment.id
+				)
+
+			# Persist in-app notification before attempting email
+			db.session.commit()
+
+			# --- EMAIL NOTIFICATION TO BOSS (Brevo) ---
+			from flask import current_app
+			from utils import send_brevo_email_async
+			boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
+			payment_details = (
+				f"Utanga amabuye: {stock.supplier}, Amafaranga: {amount} RWF, Uburyo: {form.method.data}, "
+				f"Reference: {form.reference.data}, Impamvu: {form.note.data}"
+			)
+			subject = "Gusaba kwemeza igikorwa: Kwishyura utanga Amabuye (Gasegereti)"
+			html_content = (
+				"<p>Nyakubahwa Muyobozi,</p>"
+				f"<p>Umucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) yasabye kwemeza ubwishyu bukurikira kuri Gasegereti:</p>"
+				f"<p>{payment_details}</p>"
+				"<p>Nyamuneka musuzume kandi mwemeze. Mujye Muri Sisiteme kwemeza iki gikorwa</p>"
+				"<p>Murakoze,<br>Urumuli Smart System</p>"
+			)
 			try:
-					payment = CassiteriteSupplierPayment(
-						stock_id=stock.id,
-						amount=amount,
-						method=form.method.data,
-						reference=form.reference.data,
-						note=form.note.data,
-					)
-					db.session.add(payment)
-					db.session.commit()
+				send_brevo_email_async(subject, html_content, boss_email)
+			except Exception as e:
+				import logging
+				logging.exception("Failed to enqueue cassiterite supplier payment email notification via Brevo")
+				flash("Email notification failed; in-app notification saved.", "warning")
 
-					# --- upsert PaymentReview for supplier payment (cassiterite) ---
-					from flask_login import current_user
-					from core.models import PaymentReview, PaymentReviewStatus
-					existing = PaymentReview.query.filter_by(
-						payment_id=payment.id,
-						status=PaymentReviewStatus.PENDING_REVIEW.value,
-					).first()
-					if existing:
-						existing.mineral_type = 'cassiterite'
-						existing.type = 'Utanga ibicuruzwa'
-						existing.customer = stock.supplier
-						existing.amount = amount
-						existing.currency = 'RWF'
-						existing.created_by_id = getattr(current_user, 'id', None)
-					else:
-						review = PaymentReview(
-							mineral_type='cassiterite',
-							type='Utanga ibicuruzwa',
-							customer=stock.supplier,
-							amount=amount,
-							currency='RWF',
-							payment_id=payment.id,
-							created_by_id=getattr(current_user, 'id', None)
-						)
-						db.session.add(review)
-					db.session.commit()
-
-					# --- IN-APP NOTIFICATION TO BOSS ---
-					from core.models import create_notification, User
-					boss_user = User.query.filter_by(role='boss').first()
-					if boss_user:
-						create_notification(
-							user_id=boss_user.id,
-							type_='Kwishyura utanga ibicuruzwa',
-							message=f"Hasabwe kwemeza: Kwishyura utanga ibicuruzwa kuri Gasegereti - {stock.supplier}, Amafaranga: {amount} RWF.",
-							related_type='Kwishyura utanga ibicuruzwa(gasegereti)',
-							related_id=payment.id
-						)
-
-					# Persist in-app notification before attempting email
-					db.session.commit()
-
-					# --- EMAIL NOTIFICATION TO BOSS ---
-					from flask_mail import Message
-					from flask import current_app
-					from app import mail
-					boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
-					payment_details = (
-						f"Utanga amabuye: {stock.supplier}, Amafaranga: {amount} RWF, Uburyo: {form.method.data}, "
-						f"Reference: {form.reference.data}, Impamvu: {form.note.data}"
-					)
-					msg = Message(
-						subject="Gusaba kwemeza igikorwa: Kwishyura utanga Amabuye (Gasegereti)",
-						sender=current_app.config['MAIL_USERNAME'],
-						recipients=boss_email
-					)
-					msg.body = f"""
-		Nyakubahwa Muyobozi,
-
-		Umucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) yasabye kwemeza ubwishyu bukurikira kuri Gasegereti:
-
-		{payment_details}
-
-		Nyamuneka musuzume kandi mwemeze.
-		Mujye Muri Sisiteme kwemeza iki gikorwa.
-
-		Murakoze,
-		Urumuli Smart  System
-					"""
-					try:
-						send_email(mail, msg)
-					except Exception as e:
-						import logging
-						logging.exception("Failed to enqueue cassiterite supplier payment email notification")
-						flash("Email notification failed; in-app notification saved.", "warning")
-
-					flash(
-						f"Payment of {amount} RWF recorded for {stock.supplier}.",
-						"success",
-					)
-					return redirect(url_for("cassiterite.pay_supplier"))
-			except Exception as e:  # pragma: no cover - defensive
-					db.session.rollback()
+			flash(
+				f"Payment of {amount} RWF recorded for {stock.supplier}.",
+				"success",
+			)
+			return redirect(url_for("cassiterite.pay_supplier"))
+		except Exception as e:  # pragma: no cover - defensive
+			db.session.rollback()
+			flash(f"Error saving payment: {e}", "danger")
+	# Build supplier summaries using a single grouped aggregate for payments
 	supplier_summaries = []
+	stock_ids = [r.id for r in stock_rows]
+	if stock_ids:
+		paid_rows = (
+			db.session.query(
+				CassiteriteSupplierPayment.stock_id,
+				func.coalesce(func.sum(CassiteriteSupplierPayment.amount), 0).label('paid')
+			)
+			.filter(CassiteriteSupplierPayment.stock_id.in_(stock_ids))
+			.group_by(CassiteriteSupplierPayment.stock_id)
+			.all()
+		)
+		paid_map = {r.stock_id: float(r.paid) for r in paid_rows}
+	else:
+		paid_map = {}
 
-	for stock in stocks:
-		total_paid = sum(p.amount for p in stock.supplier_payments)
-		remaining = (stock.balance_to_pay or 0) - total_paid
-
+	for row in stock_rows:
+		total_paid = paid_map.get(row.id, 0.0)
+		remaining = (row.balance_to_pay or 0) - total_paid
 		if remaining <= 0:
 			continue
-
 		supplier_summaries.append(
 			{
-				"stock_id": stock.id,
-				"supplier": stock.supplier,
-				"voucher_no": stock.voucher_no,
-				"owed": float(stock.balance_to_pay or 0),
+				"stock_id": row.id,
+				"supplier": row.supplier,
+				"voucher_no": row.voucher_no,
+				"owed": float(row.balance_to_pay or 0),
 				"paid": float(total_paid),
 				"remaining": float(remaining),
 			}
@@ -318,8 +315,15 @@ def edit_supplier_payment(payment_id):
 	form = CassiteriteSupplierPaymentForm()
 
 	# populate choices
-	stocks = CassiteriteStock.query.order_by(CassiteriteStock.date.desc()).all()
-	form.stock_id.choices = [(s.id, f"{s.voucher_no} - {s.supplier}") for s in stocks]
+	# Fetch only required columns for choices to avoid hydrating full ORM objects
+	stock_rows = (
+		db.session.query(CassiteriteStock.id, CassiteriteStock.voucher_no, CassiteriteStock.supplier)
+		.order_by(CassiteriteStock.date.desc())
+		.all()
+	)
+	form.stock_id.choices = [
+		(r[0], f"{r[1]} - {r[2]}") for r in stock_rows
+	]
 
 	if form.validate_on_submit():
 		# require a reason for edits
@@ -378,27 +382,22 @@ def edit_supplier_payment(payment_id):
 			# best-effort email to boss
 			try:
 				from flask import current_app
-				from flask_mail import Message
-				from app import mail
-				from utils import send_email
+				from utils import send_brevo_email_async
 				boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
-				msg = Message(
-					subject="Saba Kwemezwa: Impinduka kuri Kwishyura utanga Ibicuruzwa (Gasegereti)",
-					sender=current_app.config.get('MAIL_USERNAME'),
-					recipients=boss_email,
-				)
-				msg.body = (
-					f"Nyakubahwa Muyobozi,\n\nUmucungamutungo {getattr(_current_user,'username','Unknown')} "
-					f"yasabye ko musuzuma impinduka zikurikira kuri kwishyura utanga ibicuruzwa kuri Gasegereti:\n\n"
-					f"Umutanga: {stock.supplier}\nAmafaranga (byahinduwe): {payment.amount} RWF\nImpamvu: {form.change_reason.data.strip()}\n\n"
-					"Murakoze,\nMujye muri system kwemeza iki gikorwa.\n Urumuli Smart System"
+				subject = "Saba Kwemezwa: Impinduka kuri Kwishyura utanga Ibicuruzwa (Gasegereti)"
+				html_content = (
+					f"<p>Nyakubahwa Muyobozi,</p>"
+					f"<p>Umucungamutungo {getattr(_current_user,'username','Unknown')} "
+					f"yasabye ko musuzuma impinduka zikurikira kuri kwishyura utanga ibicuruzwa kuri Gasegereti:</p>"
+					f"<p>Umutanga: {stock.supplier}<br>Amafaranga (byahinduwe): {payment.amount} RWF<br>Impamvu: {form.change_reason.data.strip()}</p>"
+					"<p>Murakoze,<br>Mujye Muri system kwemeza iki gikorwa.<br>Urumuli Smart System</p>"
 				)
 				try:
-					send_email(mail, msg)
+					send_brevo_email_async(subject, html_content, boss_email)
 				except Exception:
-						import logging
-						logging.exception("Failed to enqueue supplier edit email")
-						flash("Email notification failed; in-app notification saved.", "warning")
+					import logging
+					logging.exception("Failed to enqueue supplier edit email via Brevo")
+					flash("Email notification failed; in-app notification saved.", "warning")
 			except Exception:
 				pass
 
@@ -436,45 +435,55 @@ def delete_supplier_payment(payment_id):
 		return redirect(url_for('cassiterite.cassiterite_supplier_ledger', supplier=supplier) if supplier else url_for('cassiterite.pay_supplier'))
 
 	try:
+		# Perform immediate deletion; record the details for boss review/notification.
 		from flask_login import current_user as _current_user
 		from core.models import create_notification, User
-			# upsert pending PaymentReview representing the delete request
 		from core.models import PaymentReviewStatus, PaymentReview
+
+		# capture fields before delete
+		captured_amount = payment.amount
+		captured_payment_id = payment.id
+
+		db.session.delete(payment)
+		db.session.commit()
+
+		# create a PaymentReview so boss can see and audit the deletion
 		existing = PaymentReview.query.filter_by(
-				payment_id=payment.id,
-				status=PaymentReviewStatus.PENDING_REVIEW.value,
-			).first()
+			payment_id=captured_payment_id,
+			status=PaymentReviewStatus.PENDING_REVIEW.value,
+		).first()
 		if existing:
-				existing.mineral_type = 'cassiterite'
-				existing.type = 'supplier'
-				existing.customer = supplier
-				existing.amount = payment.amount
-				existing.currency = 'RWF'
-				existing.created_by_id = getattr(_current_user, 'id', None)
-				existing.boss_comment = (f"Delete requested: {reason.strip()}")
+			existing.mineral_type = 'cassiterite'
+			existing.type = 'supplier'
+			existing.customer = supplier
+			existing.amount = captured_amount
+			existing.currency = 'RWF'
+			existing.created_by_id = getattr(_current_user, 'id', None)
+			existing.boss_comment = (f"Delete requested: {reason.strip()}")
 		else:
-				review = PaymentReview(
-					mineral_type='cassiterite',
-					type='supplier',
-					customer=supplier,
-					amount=payment.amount,
-					currency='RWF',
-					payment_id=payment.id,
-					created_by_id=getattr(_current_user, 'id', None),
-					boss_comment=(f"Delete requested: {reason.strip()}"),
-				)
-				db.session.add(review)
+			review = PaymentReview(
+				mineral_type='cassiterite',
+				type='supplier',
+				customer=supplier,
+				amount=captured_amount,
+				currency='RWF',
+				payment_id=captured_payment_id,
+				created_by_id=getattr(_current_user, 'id', None),
+				boss_comment=(f"Delete requested: {reason.strip()}"),
+			)
+			db.session.add(review)
+
 		boss_user = User.query.filter_by(role='boss').first()
 		if boss_user:
 			create_notification(
 				user_id=boss_user.id,
 				type_='Gusaba Gusiba igikorwa',
-				message=f"Hasabwe gusuzuma: Gusiba kwishyura utanga amabuye  (Gasegereti) - {supplier}, Amafaranga: {payment.amount} RWF. Icyitonderwa: {reason.strip()}",
+				message=f"Hasabwe gusuzuma: Gusiba kwishyura utanga amabuye  (Gasegereti) - {supplier}, Amafaranga: {captured_amount} RWF. Icyitonderwa: {reason.strip()}",
 				related_type='cassiterite_supplier_payment',
-				related_id=payment.id,
+				related_id=captured_payment_id,
 			)
 		db.session.commit()
-		flash('Delete request submitted for boss review; payment was not deleted until approval.', 'success')
+		flash('Payment deleted; boss has been notified for review.', 'success')
 	except Exception as e:
 		db.session.rollback()
 		flash(f'Error submitting delete request: {e}', 'danger')
@@ -576,19 +585,28 @@ def delete_worker_payment(payment_id):
 		return redirect(url_for('cassiterite.pay_worker'))
 
 	try:
+		# Immediately delete the worker payment, then notify boss for review
 		from flask_login import current_user as _current_user
 		from core.models import create_notification, User
-		# upsert pending review for worker delete request
 		from core.models import PaymentReviewStatus, PaymentReview
+
+		# capture fields
+		captured_amount = payment.amount
+		captured_payment_id = payment.id
+		captured_worker = payment.worker_name
+
+		db.session.delete(payment)
+		db.session.commit()
+
 		existing = PaymentReview.query.filter_by(
-			payment_id=payment.id,
+			payment_id=captured_payment_id,
 			status=PaymentReviewStatus.PENDING_REVIEW.value,
 		).first()
 		if existing:
 			existing.mineral_type = None
 			existing.type = 'worker'
-			existing.customer = payment.worker_name
-			existing.amount = payment.amount
+			existing.customer = captured_worker
+			existing.amount = captured_amount
 			existing.currency = 'RWF'
 			existing.created_by_id = getattr(_current_user, 'id', None)
 			existing.boss_comment = (f"Delete requested: {reason.strip()}")
@@ -596,25 +614,26 @@ def delete_worker_payment(payment_id):
 			review = PaymentReview(
 				mineral_type=None,
 				type='worker',
-				customer=payment.worker_name,
-				amount=payment.amount,
+				customer=captured_worker,
+				amount=captured_amount,
 				currency='RWF',
-				payment_id=payment.id,
+				payment_id=captured_payment_id,
 				created_by_id=getattr(_current_user, 'id', None),
 				boss_comment=(f"Delete requested: {reason.strip()}"),
 			)
 			db.session.add(review)
+
 		boss_user = User.query.filter_by(role='boss').first()
 		if boss_user:
 			create_notification(
 				user_id=boss_user.id,
 				type_='PAYMENT_DELETE_REQUEST',
-				message=f"Hasabwe gusuzuma: Gusiba kwishyura umukozi - {payment.worker_name}, Amafaranga: {payment.amount} RWF. Icyitonderwa: {reason.strip()}",
+				message=f"Hasabwe gusuzuma: Gusiba kwishyura umukozi - {captured_worker}, Amafaranga: {captured_amount} RWF. Icyitonderwa: {reason.strip()}",
 				related_type='cassiterite_worker_payment',
-				related_id=payment.id,
+				related_id=captured_payment_id,
 			)
 		db.session.commit()
-		flash('Delete request submitted for boss review; payment was not deleted until approval.', 'success')
+		flash('Payment deleted; boss has been notified for review.', 'success')
 	except Exception as e:
 		db.session.rollback()
 		flash(f'Error submitting delete request: {e}', 'danger')
@@ -627,8 +646,13 @@ def delete_worker_payment(payment_id):
 def cassiterite_supplier_ledger(supplier):
 	"""Detailed ledger view for a single cassiterite supplier."""
 
-	# All stocks and payments for this supplier
-	stocks = CassiteriteStock.query.filter_by(supplier=supplier).order_by(CassiteriteStock.date).all()
+	# All stocks and payments for this supplier: select only required columns and batch-load payments
+	stock_rows = db.session.query(
+		CassiteriteStock.id,
+		CassiteriteStock.date,
+		CassiteriteStock.voucher_no,
+		CassiteriteStock.balance_to_pay,
+	).filter(CassiteriteStock.supplier == supplier).order_by(CassiteriteStock.date).all()
 
 	payments = (
 		CassiteriteSupplierPayment.query
@@ -640,29 +664,24 @@ def cassiterite_supplier_ledger(supplier):
 
 	# Build combined ledger entries (purchases = debit, payments = credit)
 	ledger_entries = []
-
-	for stock in stocks:
-		ledger_entries.append(
-			{
-				"date": stock.date,
-				"description": f"Purchase {stock.voucher_no}",
-				"debit": float(stock.balance_to_pay or 0),
-				"credit": 0.0,
-				"is_payment": False,
-			}
-		)
+	for r in stock_rows:
+		ledger_entries.append({
+			"date": r.date,
+			"description": f"Purchase {r.voucher_no}",
+			"debit": float(r.balance_to_pay or 0),
+			"credit": 0.0,
+			"is_payment": False,
+		})
 
 	for payment in payments:
-		ledger_entries.append(
-			{
-				"date": payment.paid_at.date() if payment.paid_at else None,
-				"description": f"Payment (ref: {payment.reference or 'N/A'})",
-				"debit": 0.0,
-				"credit": float(payment.amount or 0),
-				"is_payment": True,
-				"payment_id": payment.id,
-			}
-		)
+		ledger_entries.append({
+			"date": payment.paid_at.date() if payment.paid_at else None,
+			"description": f"Payment (ref: {payment.reference or 'N/A'})",
+			"debit": 0.0,
+			"credit": float(payment.amount or 0),
+			"is_payment": True,
+			"payment_id": payment.id,
+		})
 
 	# Sort all entries by date
 	ledger_entries.sort(key=lambda x: x["date"] or 0)

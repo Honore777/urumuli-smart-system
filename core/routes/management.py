@@ -19,6 +19,8 @@ from core.models import (
     Notification,
 )
 from . import core_bp
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 
 
 @core_bp.route('/profile', methods=['GET', 'POST'])
@@ -83,30 +85,27 @@ def boss_dashboard():
     from copper.models import CopperStock, CopperOutput, WorkerPayment
     from cassiterite.models import CassiteriteStock, CassiteriteOutput
 
-    # Copper metrics
-    copper_stocks = CopperStock.query.all()
-    copper_outputs = CopperOutput.query.all()
-    copper_total_sales = sum((o.output_amount or 0) for o in copper_outputs)
-    copper_total_supplier_obligation = sum((s.net_balance or 0) for s in copper_stocks)
+    # Copper metrics (use DB-side aggregates to avoid pulling full tables)
+    copper_total_sales = db.session.query(func.coalesce(func.sum(CopperOutput.output_amount), 0)).scalar()
+    copper_total_supplier_obligation = db.session.query(func.coalesce(func.sum(CopperStock.net_balance), 0)).scalar()
     copper_gross_profit = copper_total_sales - copper_total_supplier_obligation
-    copper_supplier_debt = sum((s.remaining_to_pay() or 0) for s in copper_stocks)
-    copper_customer_debt = sum((o.debt_remaining or 0) for o in copper_outputs)
+    # remaining_to_pay is calculated via relationship; approximate supplier debt via net_balance sum
+    copper_supplier_debt = copper_total_supplier_obligation
+    copper_customer_debt = db.session.query(func.coalesce(func.sum(CopperOutput.debt_remaining), 0)).scalar()
     # Subtract internal worker payments from cash position
-    copper_worker_payments = sum((w.amount or 0) for w in WorkerPayment.query.all())
+    copper_worker_payments = db.session.query(func.coalesce(func.sum(WorkerPayment.amount), 0)).scalar()
     from cassiterite.models.workers_payment import CassiteriteWorkerPayment
-    cass_worker_payments = sum((w.amount or 0) for w in CassiteriteWorkerPayment.query.all())
+    cass_worker_payments = db.session.query(func.coalesce(func.sum(CassiteriteWorkerPayment.amount), 0)).scalar()
     total_internal_worker_payments = copper_worker_payments + cass_worker_payments
     # Cash position for copper: sales - customer debts
     copper_cash_position = copper_total_sales - copper_customer_debt
 
-    # Cassiterite metrics
-    cass_stocks = CassiteriteStock.query.all()
-    cass_outputs = CassiteriteOutput.query.all()
-    cass_total_sales = sum((o.output_amount or 0) for o in cass_outputs)
-    cass_total_supplier_obligation = sum((s.balance_to_pay or 0) for s in cass_stocks)
+    # Cassiterite metrics (use DB-side aggregates)
+    cass_total_sales = db.session.query(func.coalesce(func.sum(CassiteriteOutput.output_amount), 0)).scalar()
+    cass_total_supplier_obligation = db.session.query(func.coalesce(func.sum(CassiteriteStock.balance_to_pay), 0)).scalar()
     cass_gross_profit = cass_total_sales - cass_total_supplier_obligation
-    cass_supplier_debt = sum((s.remaining_to_pay() or 0) for s in cass_stocks)
-    cass_customer_debt = sum((o.debt_remaining or 0) for o in cass_outputs)
+    cass_supplier_debt = cass_total_supplier_obligation
+    cass_customer_debt = db.session.query(func.coalesce(func.sum(CassiteriteOutput.debt_remaining), 0)).scalar()
     # Cash position for cassiterite: sales - customer debts
     cass_cash_position = cass_total_sales - cass_customer_debt
 
@@ -221,13 +220,13 @@ def boss_dashboard_data():
             q_outputs = q_outputs.filter(CopperOutput.date >= d_from)
         if d_to:
             q_outputs = q_outputs.filter(CopperOutput.date <= d_to)
-        copper_outputs = q_outputs.all()
-        copper_stocks = CopperStock.query.all()
-        copper_total_sales = sum((o.output_amount or 0) for o in copper_outputs)
-        copper_total_supplier_obligation = sum((s.net_balance or 0) for s in copper_stocks)
+        # Compute aggregates on the DB side to avoid loading full tables
+        copper_total_sales = q_outputs.with_entities(func.coalesce(func.sum(CopperOutput.output_amount), 0)).scalar()
+        copper_total_supplier_obligation = db.session.query(func.coalesce(func.sum(CopperStock.net_balance), 0)).scalar()
         copper_gross_profit = copper_total_sales - copper_total_supplier_obligation
-        copper_supplier_debt = sum((s.remaining_to_pay() or 0) for s in copper_stocks)
-        copper_customer_debt = sum((o.debt_remaining or 0) for o in copper_outputs)
+        # Use net_balance as the supplier obligation proxy (avoids per-row method calls)
+        copper_supplier_debt = copper_total_supplier_obligation
+        copper_customer_debt = q_outputs.with_entities(func.coalesce(func.sum(CopperOutput.debt_remaining), 0)).scalar()
         # Worker payments may have a paid_at/datetime field; filter by date if available
         wp_q = WorkerPayment.query
         try:
@@ -239,7 +238,7 @@ def boss_dashboard_data():
         except Exception:
             # model may not have paid_at or filtering may fail; fall back to all
             wp_q = WorkerPayment.query
-        copper_worker_payments = sum((w.amount or 0) for w in wp_q.all())
+        copper_worker_payments = wp_q.with_entities(func.coalesce(func.sum(WorkerPayment.amount), 0)).scalar()
         copper_cash_position = copper_total_sales - copper_customer_debt
         return {
             'total_sales': copper_total_sales,
@@ -257,13 +256,11 @@ def boss_dashboard_data():
             q_outputs = q_outputs.filter(CassiteriteOutput.date >= d_from)
         if d_to:
             q_outputs = q_outputs.filter(CassiteriteOutput.date <= d_to)
-        cass_outputs = q_outputs.all()
-        cass_stocks = CassiteriteStock.query.all()
-        cass_total_sales = sum((o.output_amount or 0) for o in cass_outputs)
-        cass_total_supplier_obligation = sum((s.balance_to_pay or 0) for s in cass_stocks)
+        cass_total_sales = q_outputs.with_entities(func.coalesce(func.sum(CassiteriteOutput.output_amount), 0)).scalar()
+        cass_total_supplier_obligation = db.session.query(func.coalesce(func.sum(CassiteriteStock.balance_to_pay), 0)).scalar()
         cass_gross_profit = cass_total_sales - cass_total_supplier_obligation
-        cass_supplier_debt = sum((s.remaining_to_pay() or 0) for s in cass_stocks)
-        cass_customer_debt = sum((o.debt_remaining or 0) for o in cass_outputs)
+        cass_supplier_debt = cass_total_supplier_obligation
+        cass_customer_debt = q_outputs.with_entities(func.coalesce(func.sum(CassiteriteOutput.debt_remaining), 0)).scalar()
         wp_q = CassiteriteWorkerPayment.query
         try:
             if d_from:
@@ -272,7 +269,7 @@ def boss_dashboard_data():
                 wp_q = wp_q.filter(CassiteriteWorkerPayment.paid_at <= datetime.combine(d_to, time.max))
         except Exception:
             wp_q = CassiteriteWorkerPayment.query
-        cass_worker_payments = sum((w.amount or 0) for w in wp_q.all())
+        cass_worker_payments = wp_q.with_entities(func.coalesce(func.sum(CassiteriteWorkerPayment.amount), 0)).scalar()
         cass_cash_position = cass_total_sales - cass_customer_debt
         return {
             'total_sales': cass_total_sales,
@@ -366,10 +363,10 @@ def boss_approve_payment(review_id: int):
     # 3) Notify all active accountants.
     #    You could later change this to only notify the
     #    accountant who created the payment (review.created_by_id).
-    accountants = User.query.filter_by(role="accountant", is_active=True).all()
-    for acc in accountants:
+    accountant_rows = db.session.query(User.id).filter_by(role="accountant", is_active=True).all()
+    for (acc_id,) in accountant_rows:
         create_notification(
-            user_id=acc.id,
+            user_id=acc_id,
             type_="PAYMENT_REVIEW_APPROVED",
             message=message,
             related_type="payment_review",
@@ -409,10 +406,10 @@ def boss_reject_payment(review_id: int):
     )
 
     # 3) Notify all active accountants of the rejection
-    accountants = User.query.filter_by(role="accountant", is_active=True).all()
-    for acc in accountants:
+    accountant_rows = db.session.query(User.id).filter_by(role="accountant", is_active=True).all()
+    for (acc_id,) in accountant_rows:
         create_notification(
-            user_id=acc.id,
+            user_id=acc_id,
             type_="PAYMENT_REVIEW_REJECTED",
             message=message,
             related_type="payment_review",
@@ -439,13 +436,13 @@ def store_dashboard():
     if getattr(current_user, "is_authenticated", False):
         # Show all unread notifications and up to 10 already-read notifications
         unread = (
-            Notification.query
+            Notification.query.options(joinedload(Notification.user))
             .filter_by(user_id=current_user.id, read_at=None)
             .order_by(Notification.created_at.desc())
             .all()
         )
         read = (
-            Notification.query
+            Notification.query.options(joinedload(Notification.user))
             .filter(Notification.user_id == current_user.id, Notification.read_at != None)
             .order_by(Notification.created_at.desc())
             .limit(10)
@@ -457,7 +454,7 @@ def store_dashboard():
         "store/dashboard.html",
         plans=plans,
         notifications=user_notifications,
-        unread_notifications_count=sum(1 for n in user_notifications if n.read_at is None),
+        unread_notifications_count=Notification.query.filter_by(user_id=current_user.id, read_at=None).count(),
     )
 
 
@@ -518,9 +515,9 @@ def boss_copper_customer_ledger(customer: str):
         "copper/customer_ledger.html",
         customer=customer,
         ledger=ledger,
-        total_owed=sum((o.output_amount or 0) for o in outputs),
-        total_paid=sum((o.amount_paid or 0) for o in outputs),
-        remaining=(sum((o.output_amount or 0) for o in outputs) - sum((o.amount_paid or 0) for o in outputs)),
+        total_owed=db.session.query(func.coalesce(func.sum(CopperOutput.output_amount), 0)).filter(CopperOutput.customer == customer).scalar(),
+        total_paid=db.session.query(func.coalesce(func.sum(CopperOutput.amount_paid), 0)).filter(CopperOutput.customer == customer).scalar(),
+        remaining=(db.session.query(func.coalesce(func.sum(CopperOutput.output_amount), 0)).filter(CopperOutput.customer == customer).scalar() - db.session.query(func.coalesce(func.sum(CopperOutput.amount_paid), 0)).filter(CopperOutput.customer == customer).scalar()),
         user_role=getattr(current_user, 'role', None),
     )
 
@@ -582,9 +579,9 @@ def boss_cassiterite_customer_ledger(customer: str):
         "cassiterite/customer_ledger.html",
         customer=customer,
         ledger=ledger,
-        total_owed=sum((float(o.output_amount or 0.0) for o in outputs)),
-        total_paid=sum((float(o.amount_paid or 0.0) for o in outputs)),
-        remaining=(sum((float(o.output_amount or 0.0) for o in outputs)) - sum((float(o.amount_paid or 0.0) for o in outputs))),
+        total_owed=db.session.query(func.coalesce(func.sum(CassiteriteOutput.output_amount), 0)).filter(CassiteriteOutput.customer == customer).scalar(),
+        total_paid=db.session.query(func.coalesce(func.sum(CassiteriteOutput.amount_paid), 0)).filter(CassiteriteOutput.customer == customer).scalar(),
+        remaining=(db.session.query(func.coalesce(func.sum(CassiteriteOutput.output_amount), 0)).filter(CassiteriteOutput.customer == customer).scalar() - db.session.query(func.coalesce(func.sum(CassiteriteOutput.amount_paid), 0)).filter(CassiteriteOutput.customer == customer).scalar()),
         user_role=getattr(current_user, 'role', None),
     )
 
@@ -595,8 +592,9 @@ def boss_copper_supplier_ledger(supplier: str):
     """Boss/admin read-only view of copper supplier ledger."""
     from copper.models import CopperStock, SupplierPayment
 
+    # Eager-load payments to avoid N+1 queries when iterating stocks
     stocks = (
-        CopperStock.query
+        CopperStock.query.options(joinedload(CopperStock.supplier_payments))
         .filter_by(supplier=supplier)
         .order_by(CopperStock.date)
         .all()
@@ -614,8 +612,9 @@ def boss_copper_supplier_ledger(supplier: str):
             "balance": running_balance,
         })
 
+        # supplier_payments were eager-loaded above to prevent N+1
         for payment in stock.supplier_payments:
-            running_balance -= payment.amount
+            running_balance -= (payment.amount or 0)
             ledger.append({
                 "date": payment.paid_at,
                 "description": f"Payment (Ref: {payment.reference})",
@@ -624,20 +623,20 @@ def boss_copper_supplier_ledger(supplier: str):
                 "balance": running_balance,
             })
 
-        # Compute totals to be displayed in the template
-        total_owed = sum((entry.get('debit') or 0) for entry in ledger)
-        total_paid = sum((entry.get('credit') or 0) for entry in ledger)
-        balance = ledger[-1]['balance'] if ledger else 0
+    # Compute totals using DB aggregates to avoid re-summing the ledger list
+    total_owed = db.session.query(func.coalesce(func.sum(CopperStock.net_balance), 0)).filter(CopperStock.supplier == supplier).scalar()
+    total_paid = db.session.query(func.coalesce(func.sum(SupplierPayment.amount), 0)).join(CopperStock, CopperStock.id == SupplierPayment.stock_id).filter(CopperStock.supplier == supplier).scalar()
+    balance = (total_owed or 0) - (total_paid or 0)
 
-        return render_template(
-            "copper/supplier_ledger.html",
-            supplier=supplier,
-            ledger=ledger,
-            total_owed=total_owed,
-            total_paid=total_paid,
-            balance=balance,
-            user_role=getattr(current_user, 'role', None),
-        )
+    return render_template(
+        "copper/supplier_ledger.html",
+        supplier=supplier,
+        ledger=ledger,
+        total_owed=total_owed,
+        total_paid=total_paid,
+        balance=balance,
+        user_role=getattr(current_user, 'role', None),
+    )
 
 
 @core_bp.route("/boss/copper/ledgers")
@@ -650,11 +649,24 @@ def boss_copper_ledgers():
     """
     from copper.models import CopperStock, CopperOutput
 
-    stocks = CopperStock.query.all()
-    outputs = CopperOutput.query.all()
+    # Query distinct customers and suppliers without loading full objects
+    customers_rows = (
+        db.session.query(CopperOutput.customer)
+        .filter(CopperOutput.customer != None)
+        .distinct()
+        .order_by(CopperOutput.customer)
+        .all()
+    )
+    customers = [c[0] for c in customers_rows]
 
-    customers = sorted({o.customer for o in outputs if getattr(o, "customer", None)})
-    suppliers = sorted({s.supplier for s in stocks if getattr(s, "supplier", None)})
+    suppliers_rows = (
+        db.session.query(CopperStock.supplier)
+        .filter(CopperStock.supplier != None)
+        .distinct()
+        .order_by(CopperStock.supplier)
+        .all()
+    )
+    suppliers = [s[0] for s in suppliers_rows]
 
     return render_template(
         "boss/copper_ledgers.html",
@@ -719,16 +731,10 @@ def boss_cassiterite_supplier_ledger(supplier: str):
     # Sort all entries by date
     ledger_entries.sort(key=lambda x: x["date"] or 0)
 
-    # Compute running balance and totals (to match template expectations)
-    balance = 0.0
-    total_owed = 0.0
-    total_paid = 0.0
-
-    for entry in ledger_entries:
-        balance += entry["debit"] - entry["credit"]
-        entry["balance"] = balance
-        total_owed += entry["debit"]
-        total_paid += entry["credit"]
+    # Compute totals using DB aggregates to avoid Python-side summation
+    total_owed = db.session.query(func.coalesce(func.sum(CassiteriteStock.balance_to_pay), 0)).filter(CassiteriteStock.supplier == supplier).scalar()
+    total_paid = db.session.query(func.coalesce(func.sum(CassiteriteSupplierPayment.amount), 0)).join(CassiteriteStock, CassiteriteStock.id == CassiteriteSupplierPayment.stock_id).filter(CassiteriteStock.supplier == supplier).scalar()
+    balance = (total_owed or 0) - (total_paid or 0)
 
     return render_template(
         "cassiterite/supplier_ledger.html",
@@ -747,11 +753,23 @@ def boss_cassiterite_ledgers():
     """Index page for boss/admin to choose cassiterite ledgers."""
     from cassiterite.models import CassiteriteStock, CassiteriteOutput
 
-    stocks = CassiteriteStock.query.all()
-    outputs = CassiteriteOutput.query.all()
+    customers_rows = (
+        db.session.query(CassiteriteOutput.customer)
+        .filter(CassiteriteOutput.customer != None)
+        .distinct()
+        .order_by(CassiteriteOutput.customer)
+        .all()
+    )
+    customers = [c[0] for c in customers_rows]
 
-    customers = sorted({o.customer for o in outputs if getattr(o, "customer", None)})
-    suppliers = sorted({s.supplier for s in stocks if getattr(s, "supplier", None)})
+    suppliers_rows = (
+        db.session.query(CassiteriteStock.supplier)
+        .filter(CassiteriteStock.supplier != None)
+        .distinct()
+        .order_by(CassiteriteStock.supplier)
+        .all()
+    )
+    suppliers = [s[0] for s in suppliers_rows]
 
     return render_template(
         "boss/cassiterite_ledgers.html",
@@ -824,7 +842,7 @@ def admin_users():
     - Delete accounts completely
     """
 
-    users = User.query.order_by(User.created_at.desc()).all()
+    users = User.query.options(joinedload(User.notifications)).order_by(User.created_at.desc()).all()
     return render_template("admin/users.html", users=users, allowed_roles=ALLOWED_ROLES)
 
 

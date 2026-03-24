@@ -10,6 +10,7 @@ from copper.forms import SupplierPaymentForm, WorkerPaymentForm
 from copper import copper_bp
 from core.auth import role_required
 from flask import request
+from sqlalchemy import func
 
 
 @copper_bp.route('/supplier/payment/<int:payment_id>/receipt')
@@ -47,22 +48,35 @@ def worker_receipt(payment_id):
 def pay_supplier():
     """Record supplier payments for copper stocks."""
     from flask import current_app
-    from flask_mail import Message
-    from app import mail
     from flask_login import current_user
     from core.models import PaymentReview, create_notification, User
-    from utils import send_email
+    from utils import send_brevo_email_async
     from copper.forms import SupplierPaymentForm
 
     form = SupplierPaymentForm()
 
-    # populate stock choices
-    stocks = CopperStock.query.all()
-    form.stock_id.choices = [
-        (s.id, f"{s.voucher_no} - {s.supplier} - Remaining: {s.remaining_to_pay():,.2f} RWF")
-        for s in stocks
-        if s.remaining_to_pay() > 0
-    ]
+    # populate stock choices - select only required columns, compute remaining via grouped aggregate
+    stock_rows = db.session.query(CopperStock.id, CopperStock.voucher_no, CopperStock.supplier, CopperStock.net_balance).filter(CopperStock.net_balance > 0).order_by(CopperStock.date.desc()).all()
+    stock_ids = [r.id for r in stock_rows]
+    if stock_ids:
+        paid_rows = (
+            db.session.query(
+                SupplierPayment.stock_id,
+                func.coalesce(func.sum(SupplierPayment.amount), 0).label('paid')
+            )
+            .filter(SupplierPayment.stock_id.in_(stock_ids))
+            .group_by(SupplierPayment.stock_id)
+            .all()
+        )
+        paid_map = {r.stock_id: float(r.paid) for r in paid_rows}
+    else:
+        paid_map = {}
+
+    form.stock_id.choices = []
+    for r in stock_rows:
+        remaining = (r.net_balance or 0) - paid_map.get(r.id, 0.0)
+        if remaining > 0:
+            form.stock_id.choices.append((r.id, f"{r.voucher_no} - {r.supplier} - Remaining: {remaining:,.2f} RWF"))
 
     if form.validate_on_submit():
         stock = CopperStock.query.get_or_404(form.stock_id.data)
@@ -128,17 +142,17 @@ def pay_supplier():
                 f"utanga amabuye: {stock.supplier}, Amafaranga: {amount} RWF, Uburyo: {form.method.data}, "
                 f"Reference: {form.reference.data}, Impamvu: {form.note.data}"
             )
-            msg = Message(
-                subject="Saba Kwemezwa: Kwishyura utanga Ibicuruzwa (Coltan)",
-                sender=current_app.config.get('MAIL_USERNAME'),
-                recipients=boss_email,
-            )
-            msg.body = (
-                f"Nyakubahwa Muyobozi,\n\nUmucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) "
-                f"yasabye kwemeza ubwishyu bukurikira kuri Coltan:\n\n{payment_details}\n\nNyamuneka musuzume kandi mwemeze.\nMujye muri Sisiteme kwemeza iki gikorwa\nMurakoze,\n Urumuli Smart System"
+            subject = "Saba Kwemezwa: Kwishyura utanga Ibicuruzwa (Coltan)"
+            html_content = (
+                "<p>Nyakubahwa Muyobozi,</p>"
+                f"<p>Umucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) "
+                f"yasabye kwemeza ubwishyu bukurikira kuri Coltan:</p>"
+                f"<p>{payment_details}</p>"
+                "<p>Nyamuneka musuzume kandi mwemeze. Mujye muri Sisiteme kwemeza iki gikorwa</p>"
+                "<p>Murakoze,<br>Urumuli Smart System</p>"
             )
             try:
-                send_email(mail, msg)
+                send_brevo_email_async(subject, html_content, boss_email)
             except Exception:
                 import logging
                 logging.exception("Failed to send supplier payment email")
@@ -152,32 +166,41 @@ def pay_supplier():
             return render_template('copper/pay_supplier.html', form=form)
 
     # GET or not-submitted
-    # build simple supplier summaries for display
+    # build simple supplier summaries for display using grouped queries to avoid per-row queries
     supplier_summaries = []
-    stocks = CopperStock.query.filter(CopperStock.net_balance > 0).all()
-    for s in stocks:
-        total_paid = sum(p.amount for p in s.supplier_payments or [])
-        remaining = (s.net_balance or 0) - total_paid
+    stocks = stock_rows
+    # Fetch payments for these stocks and group them
+    payments_map = {}
+    if stock_ids:
+        payments_q = (
+            db.session.query(SupplierPayment)
+            .filter(SupplierPayment.stock_id.in_(stock_ids))
+            .order_by(SupplierPayment.paid_at)
+            .all()
+        )
+        for p in payments_q:
+            payments_map.setdefault(p.stock_id, []).append(p)
+
+    for r in stocks:
+        total_paid = paid_map.get(r.id, 0.0)
+        remaining = (r.net_balance or 0) - total_paid
         if remaining <= 0:
             continue
-        # Build payments list for receipts (id, amount, date)
         payments = []
-        for p in (s.supplier_payments or []):
+        for p in payments_map.get(r.id, []):
             paid_at = getattr(p, 'paid_at', None)
             date_str = paid_at.strftime('%Y-%m-%d') if paid_at else ''
             payments.append({'id': p.id, 'amount': float(p.amount), 'date': date_str})
 
-        supplier_summaries.append(
-            {
-                'stock_id': s.id,
-                'supplier': s.supplier,
-                'voucher_no': s.voucher_no,
-                'net_balance': float(s.net_balance or 0),
-                'total_paid': float(total_paid),
-                'remaining': float(remaining),
-                'payments': payments,
-            }
-        )
+        supplier_summaries.append({
+            'stock_id': r.id,
+            'supplier': r.supplier,
+            'voucher_no': r.voucher_no,
+            'net_balance': float(r.net_balance or 0),
+            'total_paid': float(total_paid),
+            'remaining': float(remaining),
+            'payments': payments,
+        })
 
     return render_template('copper/pay_supplier.html', form=form, supplier_summaries=supplier_summaries)
 
@@ -187,8 +210,6 @@ def pay_supplier():
 def pay_worker():
     """Record internal worker payments/expenses for copper."""
     from flask import current_app
-    from flask_mail import Message
-    from app import mail
     from flask_login import current_user
     from core.models import PaymentReview, create_notification, User
 
@@ -244,24 +265,24 @@ def pay_worker():
             # Persist in-app notification before attempting email
             db.session.commit()
 
-            from utils import send_email
+            from utils import send_brevo_email_async
 
             boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
             payment_details = (
                 f"Umukozi: {form.worker_name.data}, Amafaranga: {form.amount.data} RWF, Uburyo: {form.method.data}, "
                 f"Reference: {form.reference.data}, Impamvu: {form.note.data}"
             )
-            msg = Message(
-                subject="Saba Kwemezwa: Kwishyura Umukozi ",
-                sender=current_app.config.get('MAIL_USERNAME'),
-                recipients=boss_email,
-            )
-            msg.body = (
-                f"Nyakubahwa Muyobozi,\n\nUmucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) "
-                f"yasabye kwemeza ubwishyu bukurikira :\n\n{payment_details}\n\n musuzume kandi mwemeze.\n\nMurakoze,\n Mujye Muri system kwemeza iki gikorwa.\n Urumuli Smart System"
+            subject = "Saba Kwemezwa: Kwishyura Umukozi "
+            html_content = (
+                "<p>Nyakubahwa Muyobozi,</p>"
+                f"<p>Umucungamutungo {getattr(current_user, 'username', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) "
+                f"yasabye kwemeza ubwishyu bukurikira :</p>"
+                f"<p>{payment_details}</p>"
+                "<p>Musuzume kandi mwemeze.</p>"
+                "<p>Murakoze,<br>Urumuli Smart System</p>"
             )
             try:
-                send_email(mail, msg)
+                send_brevo_email_async(subject, html_content, boss_email)
             except Exception:
                 import logging
                 logging.exception("Failed to send worker payment email")
@@ -289,8 +310,9 @@ def edit_supplier_payment(payment_id):
     payment = SupplierPayment.query.get_or_404(payment_id)
     form = SupplierPaymentForm()
 
-    stocks = CopperStock.query.order_by(CopperStock.date.desc()).all()
-    form.stock_id.choices = [(s.id, f"{s.voucher_no} - {s.supplier}") for s in stocks]
+    # Use column-only query for choices
+    stock_rows = db.session.query(CopperStock.id, CopperStock.voucher_no, CopperStock.supplier).order_by(CopperStock.date.desc()).all()
+    form.stock_id.choices = [(r.id, f"{r.voucher_no} - {r.supplier}") for r in stock_rows]
 
     if form.validate_on_submit():
         # When editing an existing payment we must have a change reason.
@@ -354,23 +376,18 @@ def edit_supplier_payment(payment_id):
 
             # send email (best-effort)
             try:
-                from flask import current_app
-                from flask_mail import Message
-                from app import mail
+                from utils import send_brevo_email_async
                 boss_email = [boss_user.email] if boss_user and boss_user.email else ["boss@example.com"]
-                msg = Message(
-                    subject="Saba Kwemezwa: Impinduka kuri Kwishyura utanga ibicuruzwa (Coltan)",
-                    sender=current_app.config.get('MAIL_USERNAME'),
-                    recipients=boss_email,
-                )
-                msg.body = (
-                    f"Nyakubahwa Muyobozi,\n\nUmucungamutungo {getattr(current_user,'username','Unknown')} "
-                    f"yasabye ko musuzuma impinduka zikurikira kuri kwishyura utanga amabuye kuri Coltan:\n\n"
-                    f"Umutanga: {stock.supplier}\nAmafaranga (byahinduwe): {payment.amount} RWF\nImpanvu: {form.change_reason.data.strip()}\n\n"
-                    "Murakoze, \nMujye Muri system kwemeza iki gikorwa.\n Urumuli  Smart System"
+                subject = "Saba Kwemezwa: Impinduka kuri Kwishyura utanga ibicuruzwa (Coltan)"
+                html_content = (
+                    "<p>Nyakubahwa Muyobozi,</p>"
+                    f"<p>Umucungamutungo {getattr(current_user,'username','Unknown')} "
+                    f"yasabye ko musuzuma impinduka zikurikira kuri kwishyura utanga amabuye kuri Coltan:</p>"
+                    f"<p>Umutanga: {stock.supplier}<br>Amafaranga (byahinduwe): {payment.amount} RWF<br>Impamvu: {form.change_reason.data.strip()}</p>"
+                    "<p>Murakoze,<br>Mujye Muri system kwemeza iki gikorwa.<br>Urumuli Smart System</p>"
                 )
                 try:
-                    send_email(mail, msg)
+                    send_brevo_email_async(subject, html_content, boss_email)
                 except Exception:
                     import logging
                     logging.exception("Failed to send supplier edit email")

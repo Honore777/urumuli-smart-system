@@ -20,10 +20,16 @@ def record_output():
         from copper.forms import CopperOutputForm
         
         form = CopperOutputForm()
-        # Populate stock choices for the dropdown
+        # Populate stock choices for the dropdown (filter in DB to avoid pulling all rows)
+        # Query only needed columns for the choices to avoid loading full ORM objects
+        stock_rows = (
+            db.session.query(CopperStock.id, CopperStock.voucher_no, CopperStock.local_balance, CopperStock.supplier)
+            .filter(CopperStock.local_balance > 0)
+            .order_by(CopperStock.date.desc())
+            .all()
+        )
         form.stock_id.choices = [
-            (s.id, f"{s.voucher_no} ({s.local_balance})  ({s.supplier})")
-            for s in CopperStock.query.order_by(CopperStock.date.desc()).all() if s.local_balance > 0
+            (r.id, f"{r.voucher_no} ({r.local_balance})  ({r.supplier})") for r in stock_rows
         ]
 
         if request.method == "POST":
@@ -74,27 +80,25 @@ def record_output():
             # Persist notification before attempting email
             db.session.commit()
 
-            # --- EMAIL NOTIFICATION TO STOREKEEPER ---
-            from flask_mail import Message
+            # --- EMAIL NOTIFICATION TO STOREKEEPER (Brevo) ---
             from flask import current_app
             from flask_login import current_user
-            from app import mail
-            from utils import send_email
+            from utils import send_brevo_email_async
             storekeeper_email = [storekeeper_user.email] if storekeeper_user and storekeeper_user.email else ["storekeeper@example.com"]
             output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {output_kg} kg, Customer: {customer}, Note: {note}"
-            msg = Message(
-                subject="Stock Output Request",
-                sender=current_app.config['MAIL_USERNAME'],
-                recipients=storekeeper_email
+            subject = "Stock Output Request"
+            html_content = (
+                "<p>Dear Storekeeper,</p>"
+                f"<p>Accountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) yasabye gusohora izi stock zikurikira:</p>"
+                f"<p>{output_details}</p>"
+                "<p>Jya muri sisiteme urebe neza stock uribuze gusohora.</p>"
+                "<p>Regards,<br>Urumuli Smart System</p>"
             )
-            msg.body = f"""
-Dear Storekeeper,\n\nAccountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) yasabye gusohora izi stock zikurikira:\n\n{output_details}\n\nPlease process this request.\n\nRegards,\nSmart Account Manager System
-            """
             try:
-                send_email(mail, msg)
+                send_brevo_email_async(subject, html_content, storekeeper_email)
             except Exception:
                 import logging
-                logging.exception("Failed to enqueue copper output email")
+                logging.exception("Failed to enqueue copper output email via Brevo")
                 flash("Email notification failed; in-app notification saved.", "warning")
             
 
@@ -111,7 +115,6 @@ Dear Storekeeper,\n\nAccountant {getattr(current_user, 'name', 'Unknown')} ({get
         if customer_filter:
             q = q.filter(CopperOutput.customer == customer_filter)
         # parse dates (YYYY-MM-DD) defensively
-        from datetime import datetime
         try:
             if date_from:
                 d1 = datetime.strptime(date_from, '%Y-%m-%d').date()

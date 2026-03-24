@@ -15,6 +15,7 @@ from copper.models import CopperOutput
 from copper import copper_bp
 from core.auth import role_required
 from core.models import PaymentReview, User, create_notification
+from sqlalchemy import func
 
 
 @copper_bp.route('/track_debts', methods=['GET', 'POST'])
@@ -107,14 +108,14 @@ def update_payment():
             db.session.add(review)
 
             # Optionally notify all active bosses that a new payment
-            # is waiting for review on their dashboard.
-            bosses = User.query.filter_by(role="boss", is_active=True).all()
+            # is waiting for review on their dashboard (fetch ids only)
+            boss_rows = db.session.query(User.id).filter_by(role="boss", is_active=True).all()
             message = (
                 f"Hasabwe kwemeza: Kwishyura umukiriya kuri Coltan - {customer_name}, Amafaranga: {payment_amount} RWF."
             )
-            for boss in bosses:
+            for (boss_id,) in boss_rows:
                 create_notification(
-                    user_id=boss.id,
+                    user_id=boss_id,
                     type_="PAYMENT_REVIEW_CREATED",
                     message=message,
                     related_type="payment_review",
@@ -182,8 +183,8 @@ def customer_ledger(customer):
         'copper/customer_ledger.html',
         customer=customer,
         ledger=ledger,
-        total_owed=sum((o.output_amount or 0) for o in outputs),
-        total_paid=sum((o.amount_paid or 0) for o in outputs),
-        remaining=(sum((o.output_amount or 0) for o in outputs) - sum((o.amount_paid or 0) for o in outputs)),
+        total_owed=db.session.query(func.coalesce(func.sum(CopperOutput.output_amount), 0)).filter(CopperOutput.customer == customer).scalar(),
+        total_paid=db.session.query(func.coalesce(func.sum(CopperOutput.amount_paid), 0)).filter(CopperOutput.customer == customer).scalar(),
+        remaining=(db.session.query(func.coalesce(func.sum(CopperOutput.output_amount), 0)).filter(CopperOutput.customer == customer).scalar() - db.session.query(func.coalesce(func.sum(CopperOutput.amount_paid), 0)).filter(CopperOutput.customer == customer).scalar()),
         user_role=getattr(current_user, 'role', None)
     )

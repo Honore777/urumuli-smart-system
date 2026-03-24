@@ -4,8 +4,16 @@ Follows the same hybrid binary/continuous pattern as copper
 """
 from pulp import LpProblem, LpVariable, lpSum, LpMinimize, LpBinary, LpContinuous
 from cassiterite.models import CassiteriteStock
+from types import SimpleNamespace
+from config import db
+import logging
+from utils import trace_time
+from sqlalchemy import func
+
+logger = logging.getLogger(__name__)
 
 
+@trace_time
 def select_stocks_for_average_quality(target_moyenne=None):
     """
     Binary selection: Select stocks to achieve target average quality.
@@ -19,12 +27,16 @@ def select_stocks_for_average_quality(target_moyenne=None):
     Returns:
         (selected_stocks_list, achieved_moyenne)
     """
-    remaining_stocks = [s for s in CassiteriteStock.query.all() if s.local_balance > 0]
-    
-    if not remaining_stocks:
+    rows = db.session.query(
+        CassiteriteStock.id,
+        CassiteriteStock.unit_percent,
+        CassiteriteStock.local_balance,
+    ).filter(CassiteriteStock.local_balance > 0).all()
+
+    if not rows:
         return [], 0
-    
-    # Binary: each stock is either selected (1) or not (0)
+
+    remaining_stocks = [SimpleNamespace(id=r[0], unit_percent=float(r[1] or 0), local_balance=float(r[2] or 0)) for r in rows]
     stock_vars = {s.id: LpVariable(f"stock{s.id}", cat=LpBinary) for s in remaining_stocks}
     
     prob = LpProblem("Cassiterite_Stock_Selection_Binary", LpMinimize)
@@ -57,14 +69,16 @@ def select_stocks_for_average_quality(target_moyenne=None):
     # Solve
     prob.solve()
     
-    # Extract selected stocks
-    selected_stocks = [s for s in remaining_stocks if stock_vars[s.id].value() == 1]
-    
-    # Calculate achieved moyenne
-    total_unit_val = sum(s.unit_percent for s in selected_stocks)
-    total_qty_val = sum(s.local_balance for s in selected_stocks)
-    achieved_moyenne = total_unit_val / total_qty_val if total_qty_val > 0 else 0
-    
+    selected_ids = [s_id for s_id, var in stock_vars.items() if var.value() == 1]
+    if not selected_ids:
+        return [], 0
+    if not selected_ids:
+        return [], 0
+
+    selected_stocks = CassiteriteStock.query.filter(CassiteriteStock.id.in_(selected_ids)).all()
+    total_unit_val = db.session.query(func.coalesce(func.sum(CassiteriteStock.unit_percent), 0)).filter(CassiteriteStock.id.in_(selected_ids)).scalar() or 0
+    total_qty_val = db.session.query(func.coalesce(func.sum(CassiteriteStock.local_balance), 0)).filter(CassiteriteStock.id.in_(selected_ids)).scalar() or 0
+    achieved_moyenne = (total_unit_val / total_qty_val) if total_qty_val > 0 else 0
     return selected_stocks, achieved_moyenne
 
 
@@ -85,30 +99,29 @@ def select_stocks_with_minimum_quantities_cassiterite(target_moyenne=None, minim
     Returns:
         (selected_stocks_list, achieved_moyenne, quantities_dict)
     """
-    remaining_stocks = [s for s in CassiteriteStock.query.all() if s.local_balance > 0]
-    
-    if not remaining_stocks:
+    rows = db.session.query(
+        CassiteriteStock.id,
+        CassiteriteStock.local_balance,
+        CassiteriteStock.unit_percent,
+    ).filter(CassiteriteStock.local_balance > 0).all()
+
+    if not rows:
         return [], 0, {}
-    
-    # Hybrid approach: mix binary and continuous
+
+    remaining_stocks = [SimpleNamespace(id=r[0], local_balance=float(r[1] or 0), unit_percent=float(r[2] or 0)) for r in rows]
+
     stock_vars = {}
-    
     for s in remaining_stocks:
         if minimum_quantities and s.id in minimum_quantities:
-            # User specified a quantity: CONTINUOUS (can be 150.5kg, not just 0 or all)
             min_qty = minimum_quantities[s.id]
             stock_vars[s.id] = LpVariable(
                 f"stock{s.id}",
                 lowBound=min_qty,
-                upBound=s.local_balance,
-                cat=LpContinuous  # Decimals allowed
+                upBound=min(min_qty, s.local_balance) if s.local_balance else min_qty,
+                cat=LpContinuous,
             )
         else:
-            # User didn't specify: BINARY (0 or use all available)
-            stock_vars[s.id] = LpVariable(
-                f"stock{s.id}",
-                cat=LpBinary  # 0 or 1 only
-            )
+            stock_vars[s.id] = LpVariable(f"stock{s.id}", cat=LpBinary)
     
     prob = LpProblem("Cassiterite_Stock_Selection_Hybrid", LpMinimize)
     
@@ -150,27 +163,31 @@ def select_stocks_with_minimum_quantities_cassiterite(target_moyenne=None, minim
     
     for s in remaining_stocks:
         var_value = stock_vars[s.id].value()
-        
         if var_value is None:
             continue
-        
         if minimum_quantities and s.id in minimum_quantities:
-            # Continuous: use value directly (already in kg)
             qty = var_value
         else:
-            # Binary: multiply by available balance
             qty = var_value * s.local_balance
-        
         if qty and qty > 0.01:
-            selected_stocks.append(s)
             quantities[s.id] = qty
-    
-    # Calculate achieved moyenne
-    total_unit_val = sum(
-        (s.unit_percent / s.local_balance if s.local_balance > 0 else 0) * quantities.get(s.id, 0)
-        for s in selected_stocks
-    )
-    total_qty_val = sum(quantities.get(s.id, 0) for s in selected_stocks)
-    achieved_moyenne = total_unit_val / total_qty_val if total_qty_val > 0 else 0
-    
+
+    selected_ids = list(quantities.keys())
+    # Rehydrate only needed columns and compute totals using quantities dict
+    rows = db.session.query(CassiteriteStock.id, CassiteriteStock.unit_percent, CassiteriteStock.local_balance).filter(CassiteriteStock.id.in_(selected_ids)).all()
+    row_map = {r[0]: {'unit_percent': float(r[1] or 0), 'local_balance': float(r[2] or 0)} for r in rows}
+
+    total_unit_val = 0.0
+    total_qty_val = 0.0
+    for sid, qty in quantities.items():
+        meta = row_map.get(sid)
+        if not meta:
+            continue
+        lb = meta['local_balance']
+        if lb > 0:
+            total_unit_val += (meta['unit_percent'] / lb) * qty
+            total_qty_val += qty
+
+    achieved_moyenne = (total_unit_val / total_qty_val) if total_qty_val > 0 else 0
+    selected_stocks = CassiteriteStock.query.filter(CassiteriteStock.id.in_(selected_ids)).all()
     return selected_stocks, achieved_moyenne, quantities

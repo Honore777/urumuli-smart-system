@@ -69,8 +69,8 @@ def optimize_stocks():
             # Capture user's adjusted quantities from form
             minimum_quantities = {}
             
-            # Get all stocks to check form values
-            all_stocks_list = CopperStock.query.all()
+            # Get only remaining stocks to check form values (avoid loading inactive rows)
+            all_stocks_list = CopperStock.query.filter(CopperStock.local_balance > 0).all()
             for s in all_stocks_list:
                 qty_key = f'qty_{s.id}'
                 if qty_key in request.form:

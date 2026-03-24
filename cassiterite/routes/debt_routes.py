@@ -122,14 +122,14 @@ def update_payment():
         db.session.add(review)
 
         # Notify all active bosses that a cassiterite payment is
-        # waiting for review.
-        bosses = User.query.filter_by(role="boss", is_active=True).all()
+        # waiting for review (ids only)
+        boss_rows = db.session.query(User.id).filter_by(role="boss", is_active=True).all()
         message = (
             f"Hasabwe kwemeza: Kwishyura umukiriya kuri Gasegereti - {customer_name}, Amafaranga: {payment_amount} RWF."
         )
-        for boss in bosses:
+        for (boss_id,) in boss_rows:
             create_notification(
-                user_id=boss.id,
+                user_id=boss_id,
                 type_="PAYMENT_REVIEW_CREATED",
                 message=message,
                 related_type="payment_review",
@@ -197,8 +197,8 @@ def customer_ledger(customer):
         'cassiterite/customer_ledger.html',
         customer=customer,
         ledger=ledger,
-        total_owed=sum((o.output_amount or 0) for o in outputs),
-        total_paid=sum((o.amount_paid or 0) for o in outputs),
-        remaining=(sum((o.output_amount or 0) for o in outputs) - sum((o.amount_paid or 0) for o in outputs)),
+        total_owed=db.session.query(func.coalesce(func.sum(CassiteriteOutput.output_amount), 0)).filter(CassiteriteOutput.customer == customer).scalar(),
+        total_paid=db.session.query(func.coalesce(func.sum(CassiteriteOutput.amount_paid), 0)).filter(CassiteriteOutput.customer == customer).scalar(),
+        remaining=(db.session.query(func.coalesce(func.sum(CassiteriteOutput.output_amount), 0)).filter(CassiteriteOutput.customer == customer).scalar() - db.session.query(func.coalesce(func.sum(CassiteriteOutput.amount_paid), 0)).filter(CassiteriteOutput.customer == customer).scalar()),
         user_role=getattr(current_user, 'role', None)
     )

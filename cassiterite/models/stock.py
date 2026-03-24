@@ -5,7 +5,8 @@ Similar to copper but without moyenne_nb, with additional LME fields.
 """
 from datetime import datetime
 from config import db
-from utils import calculate_unit_percentage, calculate_net_balance
+from sqlalchemy import func, or_
+from utils import calculate_unit_percentage, calculate_net_balance, trace_time, logger
 
 
 class CassiteriteStock(db.Model):
@@ -71,89 +72,107 @@ class CassiteriteStock(db.Model):
 
     def remaining_stock(self):
         """Calculate remaining stock after outputs"""
-        outputs_total = sum(o.output_kg for o in self.outputs or [])
+        # DB-side aggregate to avoid loading all outputs into Python
+        from .output import CassiteriteOutput
+        outputs_total = db.session.query(func.coalesce(func.sum(CassiteriteOutput.output_kg), 0)).filter(CassiteriteOutput.stock_id == self.id).scalar() or 0
         return (self.input_kg or 0) - outputs_total
 
     def remaining_to_pay(self):
         """Calculate remaining amount to pay supplier"""
-        total_paid = sum(p.amount for p in self.supplier_payments or [])
+        # DB-side aggregate to avoid loading supplier payment rows into Python
+        from .payment import CassiteriteSupplierPayment
+        total_paid = db.session.query(func.coalesce(func.sum(CassiteriteSupplierPayment.amount), 0)).filter(CassiteriteSupplierPayment.stock_id == self.id).scalar() or 0
         return (self.balance_to_pay or 0) - total_paid
 
-    def update_calculations(self, previous_stocks):
+    @trace_time
+    def update_calculations(self):
         """
         Recalculate all computed fields for this cassiterite stock.
         Called after stock entry or output changes.
         Formulas match CSV calculations exactly.
         """
-        # Step 1: ensure defaults
-        for field in ['input_kg', 'tot_amount_tag', 'rma', 'inkomane', 'percentage', 'lme', 'sec', 'tc', 'transport_tag', 'exchange']:
-            setattr(self, field, getattr(self, field) or 0.0)
+        try:
+            # Step 1: ensure defaults
+            for field in ['input_kg', 'tot_amount_tag', 'rma', 'inkomane', 'percentage', 'lme', 'sec', 'tc', 'transport_tag', 'exchange']:
+                setattr(self, field, getattr(self, field) or 0.0)
 
-        # Step 2: calculate local_balance (remaining stock after outputs)
-        self.local_balance = self.remaining_stock()
+            # Step 2: calculate local_balance (remaining stock after outputs)
+            self.local_balance = self.remaining_stock()
 
-        # Step 3: calculate unit_percent using remaining local balance (consistent with copper)
-        # Use percentage * local_balance so unit_percent decreases as stock is consumed
-        self.unit_percent = calculate_unit_percentage(self.local_balance, self.percentage)
+            # Step 3: calculate unit_percent using remaining local balance (consistent with copper)
+            # Use percentage * local_balance so unit_percent decreases as stock is consumed
+            self.unit_percent = calculate_unit_percentage(self.local_balance, self.percentage)
 
-        # Step 4: t_unity should be the per-stock contribution for optimization
-        # (not a cumulative rolling value). This matches copper's per-stock t_unity usage.
-        self.t_unity = self.unit_percent
+            # Step 4: t_unity should be the per-stock contribution for optimization
+            # (not a cumulative rolling value). This matches copper's per-stock t_unity usage.
+            self.t_unity = self.unit_percent
 
-        # Step 5: calculate u_price = (lme - sec) × percentage / 100
-        self.u_price = ((self.lme or 0) - (self.sec or 0)) * (self.percentage or 0) / 100
+            # Step 5: calculate u_price = (lme - sec) × percentage / 100
+            self.u_price = ((self.lme or 0) - (self.sec or 0)) * (self.percentage or 0) / 100
 
-        # Step 6: calculate amount (total_amount_per_kg) = (u_price - tc) / 1000
-        self.amount = ((self.u_price or 0) - (self.tc or 0)) / 1000
+            # Step 6: calculate amount (total_amount_per_kg) = (u_price - tc) / 1000
+            self.amount = ((self.u_price or 0) - (self.tc or 0)) / 1000
 
-        # Step 7: calculate amount_with_taxes = amount × exchange × input_kg
-        self.amount_with_taxes = (self.amount or 0) * (self.exchange or 0) * (self.input_kg or 0)
+            # Step 7: calculate amount_with_taxes = amount × exchange × input_kg
+            self.amount_with_taxes = (self.amount or 0) * (self.exchange or 0) * (self.input_kg or 0)
 
-        # Step 8: calculate tot_amount_tag = transport_tag × input_kg
-        self.tot_amount_tag = (self.transport_tag or 0) * (self.input_kg or 0)
+            # Step 8: calculate tot_amount_tag = transport_tag × input_kg
+            self.tot_amount_tag = (self.transport_tag or 0) * (self.input_kg or 0)
 
-        # Step 9: calculate rra_3_percent = ((((lme × percentage / 100) - 500) / 1000) × exchange × input_kg × 3) / 100
-        rra_base = (((self.lme or 0) * (self.percentage or 0) / 100) - 500) / 1000
-        self.rra_3_percent = (rra_base * (self.exchange or 0) * (self.input_kg or 0) * 3) / 100
+            # Step 9: calculate rra_3_percent = ((((lme × percentage / 100) - 500) / 1000) × exchange × input_kg × 3) / 100
+            rra_base = (((self.lme or 0) * (self.percentage or 0) / 100) - 500) / 1000
+            self.rra_3_percent = (rra_base * (self.exchange or 0) * (self.input_kg or 0) * 3) / 100
 
-        # Step 10: calculate balance_to_pay = amount_with_taxes - tot_amount_tag - rma - inkomane - rra_3_percent
-        self.balance_to_pay = (self.amount_with_taxes or 0) - (self.tot_amount_tag or 0) - (self.rma or 0) - (self.inkomane or 0) - (self.rra_3_percent or 0)
+            # Step 10: calculate balance_to_pay = amount_with_taxes - tot_amount_tag - rma - inkomane - rra_3_percent
+            self.balance_to_pay = (self.amount_with_taxes or 0) - (self.tot_amount_tag or 0) - (self.rma or 0) - (self.inkomane or 0) - (self.rra_3_percent or 0)
 
-        # Step 11: net_balance (same as balance_to_pay for cassiterite)
-        self.net_balance = self.balance_to_pay
+            # Step 11: net_balance (same as balance_to_pay for cassiterite)
+            self.net_balance = self.balance_to_pay
 
-        # Step 12: rolling total balance = sum of all balance_to_pay
-        previous_total_balance = sum((s.net_balance or 0) for s in previous_stocks)
-        self.total_balance = previous_total_balance + self.net_balance
+            # Step 12: rolling total balance = DB-side SUM of prior net_balance (only remaining stocks)
+            prev_balance_q = db.session.query(func.coalesce(func.sum(CassiteriteStock.net_balance), 0)).filter(
+                or_(
+                    CassiteriteStock.date < self.date,
+                    # include same-date rows that are "before" this one by id when id exists
+                    (CassiteriteStock.date == self.date) & (CassiteriteStock.id < (self.id or 0))
+                ),
+                CassiteriteStock.local_balance > 0
+            )
+            previous_total_balance = prev_balance_q.scalar() or 0
+            self.total_balance = previous_total_balance + (self.net_balance or 0)
 
-        # Step 13: total local balance (rolling sum of remaining stock)
-        previous_total_local = sum((s.local_balance or 0) for s in previous_stocks)
-        self.total_local_balance = previous_total_local + self.local_balance
+            # Step 13: total local balance (DB-side SUM of prior local_balance)
+            prev_local_q = db.session.query(func.coalesce(func.sum(CassiteriteStock.local_balance), 0)).filter(
+                or_(
+                    CassiteriteStock.date < self.date,
+                    (CassiteriteStock.date == self.date) & (CassiteriteStock.id < (self.id or 0))
+                ),
+                CassiteriteStock.local_balance > 0
+            )
+            previous_total_local = prev_local_q.scalar() or 0
+            self.total_local_balance = previous_total_local + (self.local_balance or 0)
 
-        # Step 14: update global moyenne
-        CassiteriteStock.update_global_moyennes()
+            # Step 14: update global moyenne
+            CassiteriteStock.update_global_moyennes()
+        except Exception:
+            try:
+                logger.exception("update_calculations failed for CassiteriteStock id=%s", getattr(self, 'id', None))
+            except Exception:
+                pass
+            raise
 
     @staticmethod
     def update_global_moyennes():
         """Recalculate MOYENNE across all remaining cassiterite stocks."""
-        all_stocks = CassiteriteStock.query.all()
-        if not all_stocks:
-            return
+        # Compute aggregates in the DB for remaining stocks to avoid loading
+        total_unit_percent = db.session.query(func.coalesce(func.sum(CassiteriteStock.unit_percent), 0)).filter(CassiteriteStock.local_balance > 0).scalar()
+        total_remaining_balance = db.session.query(func.coalesce(func.sum(CassiteriteStock.local_balance), 0)).filter(CassiteriteStock.local_balance > 0).scalar()
+        if not total_remaining_balance:
+            moyenne = 0
+        else:
+            moyenne = total_unit_percent / total_remaining_balance
 
-        remaining_stocks = [s for s in all_stocks if s.local_balance > 0]
-
-        # Ensure no None values break calculations
-        for s in remaining_stocks:
-            s.unit_percent = s.unit_percent or 0.0
-
-        total_unit_percent = sum(s.unit_percent for s in remaining_stocks)
-        total_remaining_balance = sum(s.local_balance for s in remaining_stocks)
-        
-        # CASSITERITE MOYENNE = average purity of remaining stocks
-        moyenne = total_unit_percent / total_remaining_balance if total_remaining_balance > 0 else 0
-
-        # Update all stocks with new moyenne
-        for s in all_stocks:
-            s.moyenne = moyenne
-        
-        # NOTE: Do NOT commit here - let calling function handle commits
+        # Bulk-update all rows with the new moyenne (no commit here)
+        db.session.query(CassiteriteStock).update({
+            CassiteriteStock.moyenne: moyenne,
+        }, synchronize_session=False)

@@ -24,8 +24,14 @@ def record_output():
     form = RecordCassiteriteOutputForm()
     
     # Populate stock choices
-    form.stock_id.choices = [(s.id, f"{s.voucher_no} - {s.supplier} - ({s.local_balance}kg)") 
-                             for s in CassiteriteStock.query.filter(CassiteriteStock.local_balance > 0).all()]
+    # Populate choices by selecting only required columns to avoid loading full ORM objects
+    stock_rows = (
+        db.session.query(CassiteriteStock.id, CassiteriteStock.voucher_no, CassiteriteStock.supplier, CassiteriteStock.local_balance)
+        .filter(CassiteriteStock.local_balance > 0)
+        .order_by(CassiteriteStock.date.desc())
+        .all()
+    )
+    form.stock_id.choices = [(r.id, f"{r.voucher_no} - {r.supplier} - ({r.local_balance}kg)") for r in stock_rows]
     
     if form.validate_on_submit():
         stock = CassiteriteStock.query.get(form.stock_id.data)
@@ -73,27 +79,25 @@ def record_output():
             # Persist notification before attempting email
             db.session.commit()
 
-            # --- EMAIL NOTIFICATION TO STOREKEEPER ---
-            from flask_mail import Message
+            # --- EMAIL NOTIFICATION TO STOREKEEPER (Brevo) ---
             from flask import current_app
             from flask_login import current_user
-            from app import mail
-            from utils import send_email
+            from utils import send_brevo_email_async
             storekeeper_email = [storekeeper_user.email] if storekeeper_user and storekeeper_user.email else ["storekeeper@example.com"]
             output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {form.output_kg.data} kg, Customer: {form.customer.data}, Note: {form.note.data}"
-            msg = Message(
-                subject="Cassiterite Stock Output Request",
-                sender=current_app.config['MAIL_USERNAME'],
-                recipients=storekeeper_email
+            subject = "Cassiterite Stock Output Request"
+            html_content = (
+                "<p>Dear Storekeeper,</p>"
+                f"<p>Accountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')})Yasabye gusohora iyi stock ikurikira ya Gasegereti:</p>"
+                f"<p>{output_details}</p>"
+                "<p>Jya muri sisitemu kureba neza stock uribuze gusohora.</p>"
+                "<p>Regards,<br> Urumuli Smart System</p>"
             )
-            msg.body = f"""
-    Dear Storekeeper,\n\nAccountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')}) has requested the following cassiterite stock to be released:\n\n{output_details}\n\nPlease process this request.\n\nRegards,\nSmart Account Manager System
-            """
             try:
-                send_email(mail, msg)
+                send_brevo_email_async(subject, html_content, storekeeper_email)
             except Exception:
                 import logging
-                logging.exception("Failed to enqueue cassiterite output email")
+                logging.exception("Failed to enqueue cassiterite output email via Brevo")
                 flash("Email notification failed; in-app notification saved.", "warning")
 
         flash(f"Output of {form.output_kg.data}kg recorded!", "success")
@@ -151,7 +155,8 @@ def optimize():
             
             quantities = {s.id: s.local_balance for s in selected_stocks}
             mode = 'edit'
-            all_stocks = CassiteriteStock.query.filter(CassiteriteStock.local_balance > 0).all()
+            # For edit mode display, fetch only required columns
+            all_stocks = db.session.query(CassiteriteStock.id, CassiteriteStock.voucher_no, CassiteriteStock.supplier, CassiteriteStock.local_balance).filter(CassiteriteStock.local_balance > 0).order_by(CassiteriteStock.date.desc()).all()
         
         # ═══════════════════════════════════════════════════
         # STEP 3: User clicks "Recalculate" with adjustments
@@ -159,7 +164,7 @@ def optimize():
         elif action == 'recalculate':
             # Capture user's adjusted quantities
             minimum_quantities = {}
-            all_stocks_list = CassiteriteStock.query.all()
+            all_stocks_list = db.session.query(CassiteriteStock.id, CassiteriteStock.voucher_no, CassiteriteStock.supplier, CassiteriteStock.local_balance).filter(CassiteriteStock.local_balance > 0).order_by(CassiteriteStock.date.desc()).all()
             
             for s in all_stocks_list:
                 qty_key = f'qty_{s.id}'
@@ -194,8 +199,8 @@ def optimize():
             )
             quantities = {s.id: s.local_balance for s in selected_stocks}
     
-    # Get all stocks for edit mode display
-    all_stocks = CassiteriteStock.query.filter(CassiteriteStock.local_balance > 0).all()
+    # Get all stocks for edit mode display (only selected columns)
+    all_stocks = db.session.query(CassiteriteStock.id, CassiteriteStock.voucher_no, CassiteriteStock.supplier, CassiteriteStock.local_balance).filter(CassiteriteStock.local_balance > 0).order_by(CassiteriteStock.date.desc()).all()
     
     # Store in session
     session['optimization_quantities'] = quantities
@@ -245,7 +250,9 @@ def confirm_bulk_output():
         batch_id = f"{customer_safe}_{date_str}_{hex_code}"
 
         # Get all cassiterite stocks
-        all_stocks = {s.id: s for s in CassiteriteStock.query.all()}
+        # Only fetch stocks referenced in the quantities dict to avoid loading full table
+        stock_ids = [int(k) for k in quantities.keys() if str(k).isdigit()]
+        all_stocks = {s.id: s for s in CassiteriteStock.query.filter(CassiteriteStock.id.in_(stock_ids)).all()} if stock_ids else {}
 
         # ------------------------------------------------------------------
         # 1) Build and store a BulkOutputPlan so the store keeper (and boss)

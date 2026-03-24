@@ -65,7 +65,7 @@
                 {% elif current_user.role == 'store_keeper' %}
                     <a href="{{ url_for('core.store_dashboard') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to Dashboard</a>
                 {% elif current_user.role == 'accountant' %}
-                    <a href="{{ url_for('accountant.dashboard') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to Dashboard</a>
+                    <a href="{{ url_for('copper.dashboard') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back to Dashboard</a>
                 {% else %}
                     <a href="{{ url_for('entry_point') }}" class="text-sm text-slate-500 hover:text-slate-700">&larr; Back</a>
                 {% endif %}
