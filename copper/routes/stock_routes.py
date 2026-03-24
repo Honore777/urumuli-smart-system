@@ -508,18 +508,18 @@ def filter_stocks():
                 'date': output.date.strftime('%Y-%m-%d'),
                 'output_kg': round(output.output_kg or 0, 2)
             })
-        
-            logger.info("filter_stocks: completed stocks=%d outputs=%d", len(filtered_stocks), len(filtered_outputs))
-            return jsonify({
-                'stocks': stocks_data,
-                'outputs': outputs_data,
-                'total_input': round(total_input, 2),
-                'total_output': round(total_output, 2),
-                'total_debt': round(total_debt, 2),
-                'total_stocks': total_stocks,
-                'moyenne': round(moyenne, 4),
-                'moyenne_nb': round(moyenne_nb, 4)
-            })
+
+        logger.info("filter_stocks: completed stocks=%d outputs=%d", len(filtered_stocks), len(filtered_outputs))
+        return jsonify({
+            'stocks': stocks_data,
+            'outputs': outputs_data,
+            'total_input': round(total_input, 2),
+            'total_output': round(total_output, 2),
+            'total_debt': round(total_debt, 2),
+            'total_stocks': total_stocks,
+            'moyenne': round(moyenne, 4),
+            'moyenne_nb': round(moyenne_nb, 4)
+        })
     except Exception:
         logger.exception("filter_stocks failed")
-        raise
+        return jsonify({'error': 'internal server error'}), 500
