@@ -179,6 +179,10 @@ def confirm_bulk_output():
     # 1) Build and store a BulkOutputPlan so the store keeper (and boss)
     #    can see the exact optimal table that was used here.
     # ------------------------------------------------------------------
+    # Pre-load all referenced stocks to avoid N+1 on per-stock .get()
+    stock_ids = [int(k) for k in quantities.keys() if str(k).isdigit()]
+    all_stocks = {s.id: s for s in CopperStock.query.filter(CopperStock.id.in_(stock_ids)).all()} if stock_ids else {}
+
     plan_items = []
     for stock_id_str, qty in quantities.items():
         try:
@@ -187,7 +191,7 @@ def confirm_bulk_output():
         except (ValueError, TypeError):
             continue
 
-        stock = CopperStock.query.get(stock_id)
+        stock = all_stocks.get(stock_id)
         if not stock or qty_float <= 0:
             continue
 
@@ -259,7 +263,7 @@ def confirm_bulk_output():
             stock_id = int(stock_id_str)
             qty = float(qty)
 
-            stock = CopperStock.query.get(stock_id)
+            stock = all_stocks.get(stock_id)
             if not stock:
                 continue
 
