@@ -64,41 +64,44 @@ def record_output():
         
         db.session.commit()
 
-        # --- IN-APP NOTIFICATION TO STOREKEEPER ---
+        # --- IN-APP NOTIFICATION TO ALL ACTIVE STOREKEEPERS ---
         from core.models import create_notification, User
-        storekeeper_user = User.query.filter_by(role='store_keeper').first()
-        if storekeeper_user:
+        storekeepers = User.query.filter_by(role='store_keeper', is_active=True).all()
+        emails = []
+        for sk in storekeepers:
             create_notification(
-                user_id=storekeeper_user.id,
+                user_id=sk.id,
                 type_='OUTPUT_CREATED',
                 message=f"Cassiterite stock output of {form.output_kg.data} kg for {stock.voucher_no} requires your processing.",
                 related_type='cassiterite_output',
                 related_id=output.id
             )
+            if getattr(sk, 'email', None):
+                emails.append(sk.email)
 
-            # Persist notification before attempting email
-            db.session.commit()
+        # Persist notifications before attempting email
+        db.session.commit()
 
-            # --- EMAIL NOTIFICATION TO STOREKEEPER (Brevo) ---
-            from flask import current_app
-            from flask_login import current_user
-            from utils import send_brevo_email_async
-            storekeeper_email = [storekeeper_user.email] if storekeeper_user and storekeeper_user.email else ["storekeeper@example.com"]
-            output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {form.output_kg.data} kg, Customer: {form.customer.data}, Note: {form.note.data}"
-            subject = "Cassiterite Stock Output Request"
-            html_content = (
-                "<p>Dear Storekeeper,</p>"
-                f"<p>Accountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')})Yasabye gusohora iyi stock ikurikira ya Gasegereti:</p>"
-                f"<p>{output_details}</p>"
-                "<p>Jya muri sisitemu kureba neza stock uribuze gusohora.</p>"
-                "<p>Regards,<br> Urumuli Smart System</p>"
-            )
-            try:
-                send_brevo_email_async(subject, html_content, storekeeper_email)
-            except Exception:
-                import logging
-                logging.exception("Failed to enqueue cassiterite output email via Brevo")
-                flash("Email notification failed; in-app notification saved.", "warning")
+        # --- EMAIL NOTIFICATION TO STOREKEEPERS (Brevo) ---
+        from flask import current_app
+        from flask_login import current_user
+        from utils import send_brevo_email_async
+        output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {form.output_kg.data} kg, Customer: {form.customer.data}, Note: {form.note.data}"
+        subject = "Cassiterite Stock Output Request"
+        html_content = (
+            "<p>Dear Storekeeper,</p>"
+            f"<p>Accountant {getattr(current_user, 'name', 'Unknown')} ({getattr(current_user, 'email', 'Unknown')})Yasabye gusohora iyi stock ikurikira ya Gasegereti:</p>"
+            f"<p>{output_details}</p>"
+            "<p>Jya muri sisitemu kureba neza stock uribuze gusohora.</p>"
+            "<p>Regards,<br> Urumuli Smart System</p>"
+        )
+        try:
+            recipient_list = emails if emails else ["storekeeper@example.com"]
+            send_brevo_email_async(subject, html_content, recipient_list)
+        except Exception:
+            import logging
+            logging.exception("Failed to enqueue cassiterite output email via Brevo")
+            flash("Email notification failed; in-app notification(s) saved.", "warning")
 
         flash(f"Output of {form.output_kg.data}kg recorded!", "success")
         return redirect(url_for('cassiterite.list_outputs'))
@@ -291,6 +294,7 @@ def confirm_bulk_output():
 
         # Notify all active store keepers about this new cassiterite plan
         store_keepers = User.query.filter_by(role="store_keeper", is_active=True).all()
+        emails = []
         for sk in store_keepers:
             create_notification(
                 user_id=sk.id,
@@ -302,6 +306,29 @@ def confirm_bulk_output():
                 related_type="bulk_plan",
                 related_id=plan.id,
             )
+            if getattr(sk, 'email', None):
+                emails.append(sk.email)
+
+        # Persist plan + notifications so storekeepers can see them immediately
+        db.session.commit()
+
+        # Send one email to all storekeepers with the bulk plan details
+        try:
+            from flask_login import current_user
+            from utils import send_brevo_email_async
+            subject = f"Bulk Output Plan {plan.id} - Action Required"
+            html_content = (
+                f"<p>Dear Storekeeper,</p>"
+                f"<p>A new bulk output plan (ID: {plan.id}, batch: {batch_id}) was created by {getattr(current_user, 'name', 'Unknown')} for customer {customer}.</p>"
+                f"<p>Note: {note}</p>"
+                f"<p>Log into the system to review and execute the plan.</p>"
+                "<p>Regards,<br>Urumuli Smart System</p>"
+            )
+            recipient_list = emails if emails else ["storekeeper@example.com"]
+            send_brevo_email_async(subject, html_content, recipient_list)
+        except Exception:
+            import logging
+            logging.exception("Failed to enqueue cassiterite bulk plan email via Brevo")
 
         # ------------------------------------------------------------------
         # 2) Execute outputs with proportional amounts (existing logic)

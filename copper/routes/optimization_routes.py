@@ -214,6 +214,7 @@ def confirm_bulk_output():
 
     # Notify all active store keepers that a new copper bulk plan exists.
     store_keepers = User.query.filter_by(role="store_keeper", is_active=True).all()
+    emails = []
     for sk in store_keepers:
         create_notification(
             user_id=sk.id,
@@ -225,6 +226,29 @@ def confirm_bulk_output():
             related_type="bulk_plan",
             related_id=plan.id,
         )
+        if getattr(sk, 'email', None):
+            emails.append(sk.email)
+
+    # Persist plan + notifications so storekeepers can see them immediately
+    db.session.commit()
+
+    # Send one email to all storekeepers with the bulk plan details
+    try:
+        from flask_login import current_user
+        from utils import send_brevo_email_async
+        subject = f"Bulk Output Plan {plan.id} - Action Required"
+        html_content = (
+            f"<p>Dear Storekeeper,</p>"
+            f"<p>A new bulk output plan (ID: {plan.id}, batch: {batch_id}) was created by {getattr(current_user, 'name', 'Unknown')} for customer {customer}.</p>"
+            f"<p>Note: {note}</p>"
+            f"<p>Log into the system to review and execute the plan.</p>"
+            "<p>Regards,<br>Urumuli Smart System</p>"
+        )
+        recipient_list = emails if emails else ["storekeeper@example.com"]
+        send_brevo_email_async(subject, html_content, recipient_list)
+    except Exception:
+        import logging
+        logging.exception("Failed to enqueue copper bulk plan email via Brevo")
 
     # ------------------------------------------------------------------
     # 2) Execute the actual outputs as before (business logic unchanged)

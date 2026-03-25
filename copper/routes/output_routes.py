@@ -65,26 +65,28 @@ def record_output():
 
             db.session.commit()
 
-            # --- IN-APP NOTIFICATION TO STOREKEEPER ---
+            # --- IN-APP NOTIFICATION TO ALL ACTIVE STOREKEEPERS ---
             from core.models import create_notification, User
-            storekeeper_user = User.query.filter_by(role='store_keeper').first()
-            if storekeeper_user:
+            storekeepers = User.query.filter_by(role='store_keeper', is_active=True).all()
+            emails = []
+            for sk in storekeepers:
                 create_notification(
-                    user_id=storekeeper_user.id,
+                    user_id=sk.id,
                     type_='OUTPUT_CREATED',
                     message=f"Stock output of {output_kg} kg for {stock.voucher_no} requires your processing.",
                     related_type='output',
                     related_id=out.id
                 )
+                if getattr(sk, 'email', None):
+                    emails.append(sk.email)
 
-            # Persist notification before attempting email
+            # Persist notifications before attempting email
             db.session.commit()
 
-            # --- EMAIL NOTIFICATION TO STOREKEEPER (Brevo) ---
+            # --- EMAIL NOTIFICATION TO STOREKEEPERS (Brevo) ---
             from flask import current_app
             from flask_login import current_user
             from utils import send_brevo_email_async
-            storekeeper_email = [storekeeper_user.email] if storekeeper_user and storekeeper_user.email else ["storekeeper@example.com"]
             output_details = f"Stock: {stock.voucher_no}, Supplier: {stock.supplier}, Output: {output_kg} kg, Customer: {customer}, Note: {note}"
             subject = "Stock Output Request"
             html_content = (
@@ -95,11 +97,12 @@ def record_output():
                 "<p>Regards,<br>Urumuli Smart System</p>"
             )
             try:
-                send_brevo_email_async(subject, html_content, storekeeper_email)
+                recipient_list = emails if emails else ["storekeeper@example.com"]
+                send_brevo_email_async(subject, html_content, recipient_list)
             except Exception:
                 import logging
                 logging.exception("Failed to enqueue copper output email via Brevo")
-                flash("Email notification failed; in-app notification saved.", "warning")
+                flash("Email notification failed; in-app notification(s) saved.", "warning")
             
 
 

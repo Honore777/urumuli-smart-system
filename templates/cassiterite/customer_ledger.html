@@ -81,18 +81,18 @@
                         </td>
                         <td class="px-4 py-3 text-right font-semibold">
                             {% if entry.credit > 0 %}
-                            <span class="text-green-600">${{ '{:,.2f}'.format(entry.credit or 0) }}</span>
+                            <span class="text-green-600">{{ '{:,.2f}'.format(entry.credit or 0) }}</span>
                             {% else %}
                             -
                             {% endif %}
                         </td>
                         <td class="px-4 py-3 text-right font-bold text-lg">
                             {% if entry.balance > 0 %}
-                            <span class="text-red-600">${{ '{:,.2f}'.format(entry.balance or 0) }}</span>
+                            <span class="text-red-600">{{ '{:,.2f}'.format(entry.balance or 0) }}</span>
                             {% elif entry.balance < 0 %}
-                            <span class="text-green-600">${{ '{:,.2f}'.format(entry.balance or 0) }}</span>
+                            <span class="text-green-600">{{ '{:,.2f}'.format(entry.balance or 0) }}</span>
                             {% else %}
-                            <span class="text-gray-900">$0.00</span>
+                            <span class="text-gray-900">{{ '{:,.2f}'.format(entry.balance or 0) }}</span>
                             {% endif %}
                         </td>
                     </tr>
@@ -104,11 +104,11 @@
                         <td colspan="4" class="px-4 py-3 text-right font-bold text-lg">Total Balance:</td>
                         <td class="px-4 py-3 text-right font-bold text-lg">
                             {% if final_balance > 0 %}
-                            <span class="text-red-600">${{ '{:,.2f}'.format(final_balance or 0) }}</span>
+                            <span class="text-red-600">{{ '{:,.2f}'.format(final_balance or 0) }}</span>
                             {% elif final_balance < 0 %}
-                            <span class="text-green-600">${{ '{:,.2f}'.format(final_balance or 0) }}</span>
+                            <span class="text-green-600">{{ '{:,.2f}'.format(final_balance or 0) }}</span>
                             {% else %}
-                            <span class="text-gray-900">$0.00</span>
+                            <span class="text-gray-900">0.00</span>
                             {% endif %}
                         </td>
                     </tr>
