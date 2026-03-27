@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Urumuli  Mineral System Manager</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gradient-to-br from-blue-600 to-purple-700 min-h-screen p-6">
     <div class="max-w-6xl mx-auto bg-white rounded-lg shadow-xl p-8">
@@ -126,24 +125,7 @@
             </a>
         </div>
 
-        <!-- Charts Section at Top -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10 mt-10">
-            <!-- Input vs Output Bar Chart -->
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-4 border-blue-600 pb-2">📊 Input vs Output</h2>
-                <div class="relative h-80">
-                    <canvas id="inputOutputChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Stock Distribution Pie Chart -->
-            <div class="bg-white rounded-lg shadow-lg p-6">
-                <h2 class="text-2xl font-bold text-gray-900 mb-6 border-b-4 border-purple-600 pb-2">🥧 Stock Distribution</h2>
-                <div class="relative h-80">
-                    <canvas id="stockDistributionChart"></canvas>
-                </div>
-            </div>
-        </div>
+        <!-- Charts removed: visuals were removed to reduce client-side load. Data endpoints and table/cards remain. -->
 
         <!-- Copper Stocks Table -->
         <div class="mb-10">
@@ -385,126 +367,14 @@
             });
         }
 
-        // Initialize charts with data
+        // Initialize charts removed — reuse filtered data to update cards and table only
         function initializeCharts(data = null) {
             if (!data || !data.stocks) {
-                console.warn('No data provided for charts');
+                console.warn('No data provided for charts/tables');
                 return;
             }
-            
-            const stocks = data.stocks || [];
-            const outputs = data.outputs || [];
-            
-            console.log('Initializing charts with stocks:', stocks.length, 'outputs:', outputs.length);
-            fillInputOutputChart(stocks, outputs);
-            fillStockDistributionChart(stocks);
-        }
-
-        // Fill Input vs Output Bar Chart
-        function fillInputOutputChart(stocks, outputs) {
-            const ctx = document.getElementById('inputOutputChart');
-            if (!ctx) return;
-            
-            const dateInputMap = {};
-            const dateOutputMap = {};
-            
-            stocks.forEach(s => {
-                if (!dateInputMap[s.date]) dateInputMap[s.date] = 0;
-                dateInputMap[s.date] += s.input_kg;
-            });
-            
-            // Handle outputs - could be empty array or undefined
-            if (outputs && Array.isArray(outputs)) {
-                outputs.forEach(o => {
-                    if (!dateOutputMap[o.date]) dateOutputMap[o.date] = 0;
-                    dateOutputMap[o.date] += o.output_kg;
-                });
-            }
-            
-            const dates = Object.keys(dateInputMap).sort();
-            const inputData = dates.map(d => dateInputMap[d] || 0);
-            const outputData = dates.map(d => dateOutputMap[d] || 0);
-            
-            // Use a distinct global name to avoid clashing with the canvas element id
-            if (window.inputOutputChartInstance) window.inputOutputChartInstance.destroy();
-            
-            window.inputOutputChartInstance = new Chart(ctx.getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: dates.length > 0 ? dates : ['No Data'],
-                    datasets: [
-                        {
-                            label: 'Input (kg)',
-                            data: inputData.length > 0 ? inputData : [0],
-                            backgroundColor: 'rgba(59, 130, 246, 0.7)',
-                            borderColor: 'rgb(59, 130, 246)',
-                            borderWidth: 2
-                        },
-                        {
-                            label: 'Output (kg)',
-                            data: outputData.length > 0 ? outputData : [0],
-                            backgroundColor: 'rgba(168, 85, 247, 0.7)',
-                            borderColor: 'rgb(168, 85, 247)',
-                            borderWidth: 2
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'top' } },
-                    scales: { y: { beginAtZero: true } }
-                }
-            });
-        }
-
-        // Fill Stock Distribution Pie Chart
-        function fillStockDistributionChart(stocks) {
-            const ctx = document.getElementById('stockDistributionChart');
-            if (!ctx) return;
-            
-            const supplierMap = {};
-            // Use remaining local_balance per supplier; ignore fully used stocks
-            (stocks || []).forEach(s => {
-                const remaining = s.local_balance ?? 0;
-                if (!remaining || remaining <= 0) return;
-                if (!supplierMap[s.supplier]) supplierMap[s.supplier] = 0;
-                supplierMap[s.supplier] += remaining;
-            });
-            
-            const suppliers = Object.keys(supplierMap);
-            const supplierData = Object.values(supplierMap);
-            
-            const colors = [
-                'rgba(255, 99, 132, 0.7)',
-                'rgba(54, 162, 235, 0.7)',
-                'rgba(255, 206, 86, 0.7)',
-                'rgba(75, 192, 192, 0.7)',
-                'rgba(153, 102, 255, 0.7)',
-                'rgba(255, 159, 64, 0.7)',
-                'rgba(201, 203, 207, 0.7)'
-            ];
-            
-            // Use a distinct global name to avoid clashing with the canvas element id
-            if (window.stockDistributionChartInstance) window.stockDistributionChartInstance.destroy();
-            
-            window.stockDistributionChartInstance = new Chart(ctx.getContext('2d'), {
-                type: 'doughnut',
-                data: {
-                    labels: suppliers.length > 0 ? suppliers : ['No Data'],
-                    datasets: [{
-                        data: supplierData.length > 0 ? supplierData : [0],
-                        backgroundColor: colors.slice(0, Math.max(suppliers.length, 1)),
-                        borderColor: 'white',
-                        borderWidth: 2
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { position: 'bottom' } }
-                }
-            });
+            updateTable(data.stocks);
+            updateAllCards(data);
         }
 
         // Apply filter when user clicks filter button
