@@ -119,7 +119,7 @@
             </a>
         </div>
 
-        <!-- Charts removed: visuals were removed to reduce client-side load. Data endpoints and table/cards remain. -->
+        <!-- Charts removed to improve performance; cards and tables remain -->
 
         <!-- Cassiterite Stocks Table -->
         <div class="mb-10">
@@ -384,7 +384,7 @@
             document.getElementById('cass-card-total-stocks').textContent = totalStocks;
             document.getElementById('cass-card-moyenne').textContent = moyenneValue.toFixed(4);
 
-            // Initial fetch for charts and table
+            // Initial fetch for table/cards
             fetch('{{ url_for("cassiterite.cassiterite_filter_stocks") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -393,20 +393,18 @@
             .then(r => r.json())
             .then(data => {
                 window.cassCurrentFilteredData = data;
-                cassInitializeCharts(data);
+                cassUpdateTable(data.stocks || []);
+                cassUpdateCards(data || {});
             })
             .catch(err => {
-                console.error('Cassiterite init charts error:', err);
-                cassFillInputOutputChart([], []);
-                cassFillStockDistributionChart([]);
+                console.error('Cassiterite init data error:', err);
             });
         }
 
+        // Charts removed: no-op placeholders kept for compatibility
         function cassInitializeCharts(data) {
-            // Charts removed — reuse the filtered data to update cards and table only.
-            if (!data || !data.stocks) return;
-            cassUpdateTable(data.stocks);
-            cassUpdateCards(data);
+            // intentionally left blank — charts removed to reduce client load
+            return;
         }
 
         function cassApplyFilter(event) {
@@ -425,7 +423,6 @@
                 window.cassCurrentFilteredData = data;
                 cassUpdateTable(data.stocks);
                 cassUpdateCards(data);
-                cassInitializeCharts(data);
             })
             .catch(err => console.error('Cassiterite filter error:', err));
         }

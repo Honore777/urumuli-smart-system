@@ -87,8 +87,6 @@ def edit_stock(stock_id):
         u_price = float(request.form.get("u_price") or stock.u_price or 0)
         exchange = float(request.form.get("exchange") or stock.exchange or 0)
         transport_tag = float(request.form.get("transport_tag") or stock.transport_tag or 0)
-        # RRA multiplier default (matches add_stock default when not provided)
-        rra_3_percent_default = float(request.form.get("rra_3_percent_default") or 50)
 
         # Keep same per-kg RMA/Inkomane rates as before (if any)
         old_input = stock.input_kg or 0

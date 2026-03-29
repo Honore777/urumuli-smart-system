@@ -125,7 +125,7 @@
             </a>
         </div>
 
-        <!-- Charts removed: visuals were removed to reduce client-side load. Data endpoints and table/cards remain. -->
+        <!-- Charts removed to reduce client load; cards and tables retained -->
 
         <!-- Copper Stocks Table -->
         <div class="mb-10">
@@ -347,7 +347,7 @@
             document.getElementById('card-moyenne').textContent = moyenneValue.toFixed(4);
             document.getElementById('card-moyenne-nb').textContent = moyenneNbValue.toFixed(4);
             
-            // Fetch initial data and initialize charts
+            // Fetch initial data and initialize table/cards
             fetch('{{ url_for("copper.filter_stocks") }}', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -355,27 +355,25 @@
             })
             .then(response => response.json())
             .then(data => {
-                console.log('Initialized charts with data:', data);
+                console.log('Initialized dashboard data:', data);
                 window.currentFilteredData = data;
-                initializeCharts(data);
+                updateTable(data.stocks || []);
+                updateAllCards(data || {});
             })
             .catch(error => {
-                console.error('Error initializing charts:', error);
-                // Fallback: initialize with empty charts
-                fillInputOutputChart([], []);
-                fillStockDistributionChart([]);
+                console.error('Error initializing dashboard data:', error);
             });
         }
 
-        // Initialize charts removed — reuse filtered data to update cards and table only
+        // Charts removed: keep compatibility no-op
         function initializeCharts(data = null) {
-            if (!data || !data.stocks) {
-                console.warn('No data provided for charts/tables');
-                return;
-            }
-            updateTable(data.stocks);
-            updateAllCards(data);
+            return;
         }
+
+        // Fill Input vs Output Bar Chart
+        // Charts removed: no-op placeholders kept for compatibility
+        function fillInputOutputChart(stocks, outputs) { return; }
+        function fillStockDistributionChart(stocks) { return; }
 
         // Apply filter when user clicks filter button
         function applyFilter(event) {
@@ -402,7 +400,6 @@
                 window.currentFilteredData = data;
                 updateTable(data.stocks);
                 updateAllCards(data);
-                initializeCharts(data);
             })
             .catch(error => console.error('Error:', error));
         }

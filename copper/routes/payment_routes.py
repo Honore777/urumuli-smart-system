@@ -22,12 +22,27 @@ def supplier_receipt(payment_id):
     payment = SupplierPayment.query.get(payment_id)
     if not payment:
         abort(404)
+
     stock = CopperStock.query.get(payment.stock_id)
     supplier_name = stock.supplier if stock else "Unknown"
+
+    # total paid including this payment (safe when viewing after save)
+    total_paid = db.session.query(
+        func.coalesce(func.sum(SupplierPayment.amount), 0)
+    ).filter(SupplierPayment.stock_id == stock.id).scalar() or 0.0
+
+    # remaining after this payment has been applied
+    remaining_after = (stock.net_balance or 0.0) - total_paid
+
+    # remaining before this payment (useful to show previous balance)
+    remaining_before = remaining_after + (payment.amount or 0.0)
+
     return render_template(
         'receipts/copper_supplier_receipt.html',
         payment=payment,
         supplier_name=supplier_name,
+        remaining_before=remaining_before,
+        remaining_after=remaining_after,
     )
 
 

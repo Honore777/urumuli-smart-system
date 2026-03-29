@@ -19,6 +19,6 @@ class CopperStockForm(FlaskForm):
     exchange = DecimalField('Exchange', validators=[InputRequired(), NumberRange(min=0)])
     transport_tag = DecimalField('Transport (TAG)', validators=[InputRequired(), NumberRange(min=0)])
     rma_default = DecimalField('RMA default', default=125, validators=[NumberRange(min=0)])
-    rra_3_percent_default = DecimalField('RRA 3 Percent Default', default=50, validators=[NumberRange(min=0)])
+    rra_3_percent_default = DecimalField('RRA 3 Percent Default', default=5, validators=[NumberRange(min=0)])
     inkomane_default = DecimalField('Inkomane default', default=40, validators=[NumberRange(min=0)])
     submit = SubmitField('Add Stock')

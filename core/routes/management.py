@@ -19,7 +19,7 @@ from core.models import (
     Notification,
 )
 from . import core_bp
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 
 
@@ -470,11 +470,9 @@ def boss_copper_customer_ledger(customer: str):
     from collections import defaultdict
     from copper.models import CopperOutput
 
-    # Exclude zero/negative/mistake rows: only include outputs with positive amount or payments
     outputs = (
         CopperOutput.query
-        .filter(CopperOutput.customer == customer)
-        .filter(or_(CopperOutput.output_amount > 0, CopperOutput.amount_paid > 0))
+        .filter_by(customer=customer)
         .order_by(CopperOutput.date)
         .all()
     )
@@ -535,11 +533,9 @@ def boss_cassiterite_customer_ledger(customer: str):
 
     from cassiterite.models import CassiteriteOutput
 
-    # Exclude zero/negative/mistake rows: only include outputs with positive amount or payments
     outputs = (
         CassiteriteOutput.query
-        .filter(CassiteriteOutput.customer == customer)
-        .filter(or_(CassiteriteOutput.output_amount > 0, CassiteriteOutput.amount_paid > 0))
+        .filter_by(customer=customer)
         .order_by(CassiteriteOutput.date, CassiteriteOutput.id)
         .all()
     )
