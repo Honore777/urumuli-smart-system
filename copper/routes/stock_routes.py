@@ -87,6 +87,8 @@ def edit_stock(stock_id):
         u_price = float(request.form.get("u_price") or stock.u_price or 0)
         exchange = float(request.form.get("exchange") or stock.exchange or 0)
         transport_tag = float(request.form.get("transport_tag") or stock.transport_tag or 0)
+        # RRA multiplier default (matches add_stock default when not provided)
+        rra_3_percent_default = float(request.form.get("rra_3_percent_default") or 50)
 
         # Keep same per-kg RMA/Inkomane rates as before (if any)
         old_input = stock.input_kg or 0
@@ -118,7 +120,7 @@ def edit_stock(stock_id):
         stock.inkomane = per_inkomane * input_kg
         stock.amount = percentage * input_kg * exchange * u_price
         stock.tot_amount_tag = transport_tag * input_kg
-        stock.rra_3_percent = (1.95 * exchange * percentage * input_kg) * 3 / 100
+        stock.rra_3_percent = (rra_3_percent_default * exchange * percentage * input_kg) * 3 / 100
 
         try:
             stock.update_calculations()
@@ -172,6 +174,7 @@ def add_stock():
             u_price = float(request.form.get("u_price") or 0)
             exchange = float(request.form.get("exchange") or 0)
             transport_tag = float(request.form.get("transport_tag") or 0)
+            rra_3_percent_default = float(request.form.get("rra_3_percent_default") or 50)
 
             # Calculate derived fields
             u = nb * input_kg
@@ -179,7 +182,7 @@ def add_stock():
             inkomane = inkomane_default * input_kg
             amount = percentage * input_kg * exchange * u_price
             tot_amount_tag = transport_tag * input_kg
-            rra_3_percent = (1.95 * exchange * percentage * input_kg) * 3 / 100
+            rra_3_percent = (rra_3_percent_default * exchange * percentage * input_kg) * 3 / 100
             net_balance = (amount or 0) - (tot_amount_tag or 0) - (rma or 0) - (inkomane or 0) - (rra_3_percent or 0)
 
             # Compute rolling total using a SQL aggregate (faster than pulling all rows into Python)
