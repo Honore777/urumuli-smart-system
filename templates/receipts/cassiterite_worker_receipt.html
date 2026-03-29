@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
-    <title>Coltan Supplier Payment Receipt</title>
+    <title>Cassiterite Worker Payment Receipt</title>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind.css') }}">
     <style>
@@ -14,7 +14,6 @@
             .receipt-wrapper { width: 100%; height: 100vh; padding: 0; }
         }
 
-        /* On screen we center a full-width card */
         .receipt-wrapper { max-width: none; width: 100%; margin: 0 auto; padding: 20px; }
         .receipt-table th, .receipt-table td { border: 1px solid #d1d5db; padding: 0.6rem; }
         .receipt-table { border-collapse: collapse; width: 100%; }
@@ -29,12 +28,12 @@
             <img src="/static/logo.png" alt="Company Logo" class="h-12 mr-4">
             <div>
                 <h2 class="text-white text-lg font-bold">RECEIPT FORM</h2>
-                <p class="text-white text-xs">Coltan Supplier Payment Receipt</p>
+                <p class="text-white text-xs">Cassiterite Worker Payment Receipt</p>
             </div>
         </div>
 
         <div class="p-6">
-            <p class="font-semibold text-lg mb-2">Supplier: {{ supplier_name }}</p>
+            <p class="font-semibold text-lg mb-2">Worker: {{ payment.worker_name }}</p>
 
             <!-- Details table -->
             <table class="receipt-table mt-2 mb-4 text-sm">
@@ -46,20 +45,12 @@
                 </tr>
 
                 <tr>
-                    <th>Stock ID</th>
-                    <td>{{ payment.stock_id }}</td>
+                    <th>Worker</th>
+                    <td>{{ payment.worker_name }}</td>
                     <th>Method</th>
                     <td>{{ payment.method }}</td>
                 </tr>
 
-                
-
-                <tr>
-                    <th>Remaining Before Payment</th>
-                    <td>{{ '{:,.2f}'.format(remaining_before or 0) }} RWF</td>
-                    <th>Remaining After Payment</th>
-                    <td>{{ '{:,.2f}'.format(remaining_after or 0) }} RWF</td>
-                </tr>
                 <tr>
                     <th>Paid Amount</th>
                     <td colspan="3">{{ '{:,.2f}'.format(payment.amount) }} RWF</td>
@@ -74,8 +65,7 @@
             <!-- USD conversion section (manual fields for printing/filling) -->
             <div class="mb-4">
                 <h3 class="font-semibold mb-2">USD Conversion (fill manually if needed)</h3>
-                <p class="small-note mt-2">Tip.You can just enter the exchange rate only and click calculate USD the system will do the conversion for you or you can enter them manually</p>
-                
+                <p class="small-note mt-2">Enter an exchange rate and click Calculate USD to auto-fill the USD fields for convenience.</p>
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
@@ -94,7 +84,6 @@
                     </div>
                 </div>
 
-                <p class="small-note mt-2">Tip: enter an exchange rate and click "Calculate USD" to auto-fill the USD fields for convenience.</p>
                 <div class="mt-2 no-print">
                     <button type="button" onclick="convertToUSD()" class="px-3 py-1 bg-indigo-600 text-white rounded">Calculate USD</button>
                     <button type="button" onclick="clearUSD()" class="ml-2 px-3 py-1 bg-gray-200 rounded">Clear USD</button>
@@ -105,7 +94,7 @@
             <div class="flex justify-between mt-8 mb-6">
                 <div>
                     <div class="border-t border-gray-400 w-40"></div>
-                    <p class="text-xs text-gray-600 mt-1">Supplier Signature</p>
+                    <p class="text-xs text-gray-600 mt-1">Worker Signature</p>
                 </div>
                 <div>
                     <div class="border-t border-gray-400 w-40"></div>
@@ -116,40 +105,21 @@
             <!-- Print button and back link -->
             <div class="mt-6 no-print text-center">
                 <button onclick="window.print()" class="px-4 py-2 bg-pink-600 text-white rounded">Print</button>
-                <a href="{{ url_for('copper.pay_supplier') }}" class="inline-block ml-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">Back to Pay Supplier</a>
+                <a href="{{ url_for('cassiterite.pay_worker') }}" class="inline-block ml-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition">Back to Pay Worker</a>
             </div>
         </div>
     </div>
 
     <script>
-        // Helper to auto-fill USD fields if exchange rate is provided
-        function parseNum(val) {
-            if (!val) return NaN;
-            return Number(String(val).replace(/,/g, ''));
-        }
-
+        function parseNum(val) { if (!val) return NaN; return Number(String(val).replace(/,/g, '')); }
         function convertToUSD() {
             const rate = parseNum(document.getElementById('exchange_rate').value);
-            if (!rate || isNaN(rate) || rate <= 0) {
-                alert('Enter a valid exchange rate (RWF per USD).');
-                return;
-            }
-
+            if (!rate || isNaN(rate) || rate <= 0) { alert('Enter a valid exchange rate (RWF per USD).'); return; }
             const paidRwf = parseNum("{{ '{:.2f}'.format(payment.amount) }}");
-            const remainingRwf = parseNum("{{ '{:.2f}'.format(remaining_after or 0) }}");
-
             const amtUsd = (paidRwf / rate).toFixed(2);
-            const remUsd = (remainingRwf / rate).toFixed(2);
-
             document.getElementById('amount_usd').value = amtUsd;
-            document.getElementById('remaining_usd').value = remUsd;
         }
-
-        function clearUSD() {
-            document.getElementById('amount_usd').value = '';
-            document.getElementById('remaining_usd').value = '';
-            document.getElementById('exchange_rate').value = '';
-        }
+        function clearUSD() { document.getElementById('amount_usd').value = ''; document.getElementById('remaining_usd').value = ''; document.getElementById('exchange_rate').value = ''; }
     </script>
 </body>
 </html>

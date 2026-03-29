@@ -93,11 +93,11 @@
                             <tr class="hover:bg-gray-50">
                                 <td class="px-4 py-2 font-semibold">{{ stock.id }}</td>
                                 <td class="px-4 py-2">{{ stock.supplier }}</td>
-                                <td class="px-4 py-2">{{ "%.2f"|format(stock.percentage) }}%</td>
-                                <td class="px-4 py-2 text-right">{{ "%.2f"|format(stock.local_balance) }}</td>
-                                <td class="px-4 py-2 text-right font-bold text-indigo-600">
-                                    {{ "%.2f"|format(quantities.get(stock.id, 0)) }}
-                                </td>
+                                <td class="px-4 py-2">{{ '{:,.2f}'.format(stock.percentage) }}%</td>
+                                    <td class="px-4 py-2 text-right">{{ '{:,.2f}'.format(stock.local_balance) }}</td>
+                                    <td class="px-4 py-2 text-right font-bold text-indigo-600">
+                                        {{ '{:,.2f}'.format(quantities.get(stock.id, 0)) }}
+                                    </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -430,6 +430,11 @@
                             ← Back to Initial
                         </button>
                     </form>
+                    <button type="button" 
+                            onclick="window.print()"
+                            class="bg-gray-700 text-white px-6 py-3 rounded-md hover:bg-gray-800 font-medium">
+                        🖨️ Print Results
+                    </button>
                 </div>
             </div>
 

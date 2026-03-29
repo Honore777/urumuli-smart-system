@@ -81,7 +81,7 @@
                 </div>
 
                 <!-- Recommended Stocks Table (Read-Only) -->
-                <div class="overflow-x-auto mb-6">
+                <div id="initial-stocks-table" class="overflow-x-auto mb-6">
                     <table class="min-w-full bg-white border border-gray-300">
                         <thead class="bg-indigo-600 text-white">
                             <tr>
@@ -98,11 +98,11 @@
                             <tr class="hover:bg-gray-50">
                                 <td class="px-4 py-2 font-semibold">{{ stock.id }}</td>
                                 <td class="px-4 py-2">{{ stock.supplier }}</td>
-                                <td class="px-4 py-2">{{ "%.2f"|format(stock.unit_percent) }}</td>
-                                <td class="px-4 py-2">{{ "%.2f"|format(stock.t_unity) }}</td>
-                                <td class="px-4 py-2 text-right">{{ "%.2f"|format(stock.local_balance) }}</td>
+                                <td class="px-4 py-2">{{ '{:,.2f}'.format(stock.unit_percent) }}</td>
+                                <td class="px-4 py-2">{{ '{:,.2f}'.format(stock.t_unity) }}</td>
+                                <td class="px-4 py-2 text-right">{{ '{:,.2f}'.format(stock.local_balance) }}</td>
                                 <td class="px-4 py-2 text-right font-bold text-indigo-600">
-                                    {{ "%.2f"|format(quantities.get(stock.id, 0)) }}
+                                    {{ '{:,.2f}'.format(quantities.get(stock.id, 0)) }}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -133,6 +133,11 @@
                             onclick="document.getElementById('bulk-output-form-initial').style.display='block'"
                             class="bg-green-600 text-white px-6 py-3 rounded-md hover:bg-green-700 font-medium">
                         ✅ Confirm & Output
+                    </button>
+                    <button type="button"
+                            onclick="printElement('initial-stocks-table')"
+                            class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                        🖨️ Print Recommended
                     </button>
                 </div>
 
@@ -241,7 +246,7 @@
                     <input type="hidden" name="target_moyenne" value="{{ form.target_moyenne.data }}">
                     <input type="hidden" name="target_moyenne_nb" value="{{ form.target_moyenne_nb.data }}">
 
-                    <div class="overflow-x-auto mb-6">
+                    <div id="edit-stocks-table" class="overflow-x-auto mb-6">
                         <table class="min-w-full bg-white border border-gray-300">
                             <thead class="bg-amber-600 text-white">
                                 <tr>
@@ -289,6 +294,11 @@
                                 value="back_to_initial"
                                 class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
                             ← Back
+                        </button>
+                        <button type="button"
+                                onclick="printElement('edit-stocks-table')"
+                                class="bg-gray-600 text-white px-6 py-3 rounded-md hover:bg-gray-700 font-medium">
+                            🖨️ Print Edited Selection
                         </button>
                     </div>
                 </form>
@@ -460,4 +470,23 @@
     </div>
 
 </body>
+<script>
+function printElement(elementId){
+    const el = document.getElementById(elementId);
+    if(!el){
+        window.print();
+        return;
+    }
+    const w = window.open('', '_blank');
+    // copy current styles
+    const styles = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+        .map(s => s.outerHTML).join('\n');
+    w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Print</title>' + styles + '</head><body>');
+    w.document.write(el.outerHTML);
+    w.document.write('</body></html>');
+    w.document.close();
+    w.focus();
+    setTimeout(()=>{ w.print(); w.close(); }, 300);
+}
+</script>
 </html>

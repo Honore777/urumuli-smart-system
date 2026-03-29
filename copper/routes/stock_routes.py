@@ -87,6 +87,7 @@ def edit_stock(stock_id):
         u_price = float(request.form.get("u_price") or stock.u_price or 0)
         exchange = float(request.form.get("exchange") or stock.exchange or 0)
         transport_tag = float(request.form.get("transport_tag") or stock.transport_tag or 0)
+        rra_3_percent_default = float(request.form.get("rra_3_percent_default") or 50)
 
         # Keep same per-kg RMA/Inkomane rates as before (if any)
         old_input = stock.input_kg or 0
@@ -114,7 +115,7 @@ def edit_stock(stock_id):
 
         # Recompute derived values following add_stock logic
         stock.u = nb * input_kg
-        stock.rma = per_rma * input_kg
+        stock.rra = per_rma * input_kg
         stock.inkomane = per_inkomane * input_kg
         stock.amount = percentage * input_kg * exchange * u_price
         stock.tot_amount_tag = transport_tag * input_kg
@@ -495,6 +496,7 @@ def filter_stocks():
                 'local_balance': round(stock.local_balance or 0, 2),
                 'unit_percent': round(stock.unit_percent or 0, 4),
                 't_unity': round(stock.t_unity or 0, 2),
+                'rra_3_percent': round(stock.rra_3_percent or 0, 4),
                 'net_balance': round(stock.net_balance or 0, 2),
                 'total_balance': round(stock.total_balance or 0, 2),
                 'remaining': round(stock.remaining_stock() or 0, 2),

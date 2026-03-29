@@ -282,13 +282,36 @@ def pay_supplier():
 @cassiterite_bp.route('/supplier/payment/<int:payment_id>/receipt')
 @role_required('accountant')
 def supplier_receipt(payment_id):
-    """
-    Shows a printable receipt for a supplier payment.
-    """
-    payment = CassiteriteSupplierPayment.query.get(payment_id)
-    if not payment:
-        return render_template('404.html'), 404
-    return render_template('receipts/supplier_receipt.html', payment=payment)
+	"""
+	Shows a printable receipt for a supplier payment.
+	"""
+	payment = CassiteriteSupplierPayment.query.get(payment_id)
+	if not payment:
+		return render_template('404.html'), 404
+
+	# locate related stock and supplier name
+	stock = None
+	try:
+		stock = CassiteriteStock.query.get(payment.stock_id)
+	except Exception:
+		stock = None
+	supplier_name = stock.supplier if stock else 'Unknown'
+
+	# compute totals for remaining balances (include this payment)
+	total_paid = db.session.query(
+		func.coalesce(func.sum(CassiteriteSupplierPayment.amount), 0)
+	).filter(CassiteriteSupplierPayment.stock_id == (stock.id if stock else None)).scalar() or 0.0
+
+	remaining_after = (stock.balance_to_pay or 0.0) - total_paid if stock else 0.0
+	remaining_before = remaining_after + (payment.amount or 0.0)
+
+	return render_template(
+		'receipts/cassiterite_supplier_receipt.html',
+		payment=payment,
+		supplier_name=supplier_name,
+		remaining_before=remaining_before,
+		remaining_after=remaining_after,
+	)
 
 
 @cassiterite_bp.route('/worker/payment/<int:payment_id>/receipt')
@@ -300,7 +323,8 @@ def worker_receipt(payment_id):
 	payment = CassiteriteWorkerPayment.query.get(payment_id)
 	if not payment:
 		return render_template('404.html'), 404
-	return render_template('receipts/worker_receipt.html', payment=payment)
+	# render the cassiterite full-page worker receipt
+	return render_template('receipts/cassiterite_worker_receipt.html', payment=payment)
 
 
 @cassiterite_bp.route('/supplier/payment/<int:payment_id>/edit', methods=['GET', 'POST'])
